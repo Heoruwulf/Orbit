@@ -1,0 +1,9 @@
+.env
+logs/
+build/
+vendor/
+test_client/node_modules/
+.cache/
+compile_commands.json
+*.wav
+*.raw

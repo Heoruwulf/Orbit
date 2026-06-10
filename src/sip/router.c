@@ -25,12 +25,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <unistd.h>
 #include "orbit/config.h"
 #include "orbit/event.h"
+#include "orbit/macros.h"
 #include "orbit/server.h"
 #include "orbit/sip_router.h"
 #include "orbit/ws_bridge.h"
 
 sip_verb_t sip_parse_verb(struct string_view const method) {
-    if (__builtin_expect(method.length < 3 || method.data == nullptr, 0)) {
+    if (unlikely(method.length < 3 || method.data == nullptr)) {
         return SIP_VERB_UNKNOWN;
     }
 
@@ -93,7 +94,7 @@ parse_header_line(struct string_view const line, struct sip_message *restrict co
 }
 
 bool sip_parse_message(struct string_view const raw, struct sip_message *restrict const out_msg) {
-    if (__builtin_expect(raw.data == nullptr || raw.length == 0 || out_msg == nullptr, 0))
+    if (unlikely(raw.data == nullptr || raw.length == 0 || out_msg == nullptr))
         return false;
 
     *out_msg = (struct sip_message){};
@@ -516,7 +517,7 @@ void sip_router_process_recv(struct io_event_ctx *restrict const ctx, size_t con
     struct sip_message msg = {};
     struct string_view raw = {.data = (char *)ctx->buffer, .length = len};
 
-    if (__builtin_expect(sip_parse_message(raw, &msg), 1)) {
+    if (likely(sip_parse_message(raw, &msg))) {
         struct call_session *session = nullptr;
 
         if (msg.verb == SIP_VERB_INVITE && server_is_draining()) {

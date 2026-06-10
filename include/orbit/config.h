@@ -30,7 +30,8 @@ struct app_config {
     uint16_t    sip_listen_port;
     uint16_t    rtp_min_port;
     uint16_t    rtp_max_port;
-    uint16_t    ws_port;
+    uint16_t    ws_listen_port;
+    uint16_t    ws_external_port;
     uint16_t    event_listen_port;
     uint32_t    max_calls;
 };

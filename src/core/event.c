@@ -86,7 +86,7 @@ void event_publish_call_answered(
         sizeof(ws_url),
         "ws://%s:%d/media?id=%.*s",
         g_config.ws_external_addr ? g_config.ws_external_addr : "127.0.0.1",
-        g_config.ws_port,
+        g_config.ws_external_port,
         (int)internal_id.length,
         internal_id.data);
 

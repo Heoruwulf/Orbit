@@ -42,6 +42,7 @@ struct ws_bridge_session {
     uint8_t              send_buffer[4096];
     struct string_view   unread_sv;
     bool                 send_pending;
+    bool                 recv_pending;
 };
 
 static thread_local mem_pool_t         *ws_pool      = nullptr;
@@ -175,7 +176,7 @@ int ws_bridge_init(void) {
         AF_INET,
         g_config.ws_listen_addr ? g_config.ws_listen_addr : "0.0.0.0",
         &addr.sin_addr);
-    addr.sin_port = htons(g_config.ws_port);
+    addr.sin_port = htons(g_config.ws_listen_port);
 
     if (bind(ws_server_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         LOGERR("WS Bridge: Failed to bind WebSocket server socket");
@@ -234,20 +235,36 @@ void ws_bridge_process_accept(struct io_event_ctx *restrict const ctx, int const
     session->send_ctx.fd      = res;
     session->send_ctx.session = (struct call_session *)session;
 
+    session->recv_pending = true;
     server_submit_recv(&session->recv_ctx);
 }
 
 void ws_bridge_process_recv(struct io_event_ctx *restrict const ctx, int const res) {
-    auto const session = (struct ws_bridge_session *)ctx->session;
+    auto const session    = (struct ws_bridge_session *)ctx->session;
+    session->recv_pending = false;
+
     if (res <= 0) {
-        LOGINF("WS Bridge: Connection closed (FD: %d)", session->conn.fd);
-        if (session->handshaked) {
-            ws_connection_free(&session->conn);
-            if (session->sip_call != nullptr)
-                session->sip_call->ws_session = nullptr;
+        if (session->conn.fd >= 0) {
+            LOGINF("WS Bridge: Connection closed (FD: %d)", session->conn.fd);
+            if (session->handshaked) {
+                if (session->sip_call)
+                    call_lock(session->sip_call);
+                ws_connection_free(&session->conn);
+                if (session->sip_call != nullptr) {
+                    auto const sip                = session->sip_call;
+                    session->sip_call->ws_session = nullptr;
+                    session->sip_call             = nullptr;
+                    call_unlock(sip);
+                    call_release(sip);
+                }
+            }
+            close(session->conn.fd);
+            session->conn.fd = -1;
         }
-        close(session->conn.fd);
-        pool_free(ws_pool, session);
+
+        if (!session->send_pending) {
+            pool_free(ws_pool, session);
+        }
         return;
     }
 
@@ -275,24 +292,36 @@ void ws_bridge_process_recv(struct io_event_ctx *restrict const ctx, int const r
                 char         json_buf[512];
                 size_t const json_len = ws_generate_metadata_json(sip, json_buf, sizeof(json_buf));
                 struct wslay_event_msg msg = {WSLAY_TEXT_FRAME, (uint8_t *)json_buf, json_len};
+                call_lock(sip);
                 wslay_event_queue_msg(session->conn.ctx, &msg);
                 wslay_event_send(session->conn.ctx);
+                call_unlock(sip);
             } else {
                 LOGERR(
                     "WS Bridge: Handshake failed, unknown Internal ID: %.*s",
                     (int)internal_id.length,
                     internal_id.data);
-                close(session->conn.fd);
-                pool_free(ws_pool, session);
+                if (session->conn.fd >= 0) {
+                    close(session->conn.fd);
+                    session->conn.fd = -1;
+                }
+                if (!session->send_pending) {
+                    pool_free(ws_pool, session);
+                }
                 return;
             }
         }
     } else {
         session->unread_sv = (struct string_view){(char *)session->buffer, (size_t)res};
+        if (session->sip_call)
+            call_lock(session->sip_call);
         wslay_event_recv(session->conn.ctx);
         wslay_event_send(session->conn.ctx); // In case it needs to send PONG or responses
+        if (session->sip_call)
+            call_unlock(session->sip_call);
     }
 
+    session->recv_pending = true;
     server_submit_recv(&session->recv_ctx);
 }
 
@@ -301,16 +330,36 @@ void ws_bridge_process_send(struct io_event_ctx *restrict const ctx, int const r
     session->send_pending = false;
 
     if (res <= 0) {
-        if (session->handshaked)
-            ws_connection_free(&session->conn);
-        close(session->conn.fd);
-        pool_free(ws_pool, session);
+        if (session->conn.fd >= 0) {
+            if (session->handshaked) {
+                if (session->sip_call)
+                    call_lock(session->sip_call);
+                ws_connection_free(&session->conn);
+                if (session->sip_call != nullptr) {
+                    auto const sip                = session->sip_call;
+                    session->sip_call->ws_session = nullptr;
+                    session->sip_call             = nullptr;
+                    call_unlock(sip);
+                    call_release(sip);
+                }
+            }
+            close(session->conn.fd);
+            session->conn.fd = -1;
+        }
+
+        if (!session->recv_pending) {
+            pool_free(ws_pool, session);
+        }
         return;
     }
 
     // The previous chunk finished sending over io_uring. Resume wslay.
     if (session->handshaked) {
+        if (session->sip_call)
+            call_lock(session->sip_call);
         wslay_event_send(session->conn.ctx);
+        if (session->sip_call)
+            call_unlock(session->sip_call);
     }
 }
 
@@ -321,8 +370,10 @@ void ws_bridge_send_binary(struct call_session *sip_call, uint8_t const *data, s
     auto const session = (struct ws_bridge_session *)sip_call->ws_session;
     if (session->handshaked) {
         struct wslay_event_msg msg = {WSLAY_BINARY_FRAME, (uint8_t *)data, len};
+        call_lock(sip_call);
         wslay_event_queue_msg(session->conn.ctx, &msg);
         wslay_event_send(session->conn.ctx);
+        call_unlock(sip_call);
     }
 }
 
@@ -331,10 +382,12 @@ void ws_bridge_close(struct call_session *sip_call) {
         return;
 
     auto const session = (struct ws_bridge_session *)sip_call->ws_session;
+    call_lock(sip_call);
     if (session->handshaked) {
-        LOGINF("WS Bridge: Sending close frame to client");
-        wslay_event_queue_close(session->conn.ctx, WSLAY_CODE_NORMAL_CLOSURE, nullptr, 0);
-        wslay_event_send(session->conn.ctx);
+        LOGINF("WS Bridge: Closing connection to client");
+        shutdown(session->conn.fd, SHUT_RDWR);
     }
-    sip_call->ws_session = nullptr;
+    // Do not set sip_call->ws_session = nullptr here.
+    // The WS thread will wake up from the shutdown EOF and clean up safely on its own thread.
+    call_unlock(sip_call);
 }

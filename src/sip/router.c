@@ -139,8 +139,8 @@ bool sip_parse_message(struct string_view const raw, struct sip_message *restric
 #include "orbit/memory.h"
 #include "orbit/rtp_engine.h"
 
-static thread_local mem_pool_t           *call_pool    = nullptr;
-static thread_local struct call_session **active_calls = nullptr;
+static thread_local mem_pool_t *call_pool    = nullptr;
+static struct call_session    **active_calls = nullptr;
 
 static thread_local int                 sip_fd       = -1;
 static thread_local struct io_event_ctx sip_recv_ctx = {.type = EVENT_TYPE_SIP_RECV};
@@ -150,9 +150,22 @@ static thread_local struct io_event_ctx sip_send_ctx = {.type = EVENT_TYPE_SIP_S
 static thread_local uint8_t             sip_send_buffer[4096];
 
 int sip_router_init(void) {
-    active_calls =
-        (struct call_session **)calloc(g_config.max_calls, sizeof(struct call_session *));
-    if (active_calls == nullptr) {
+    if (__atomic_load_n(&active_calls, __ATOMIC_ACQUIRE) == nullptr) {
+        auto const new_arr =
+            (struct call_session **)calloc(g_config.max_calls, sizeof(struct call_session *));
+        struct call_session **expected = nullptr;
+        if (!__atomic_compare_exchange_n(
+                &active_calls,
+                &expected,
+                new_arr,
+                false,
+                __ATOMIC_ACQ_REL,
+                __ATOMIC_ACQUIRE))
+        {
+            free(new_arr);
+        }
+    }
+    if (__atomic_load_n(&active_calls, __ATOMIC_ACQUIRE) == nullptr) {
         LOGERR("SIP Router: Failed to allocate active_calls array");
         return -1;
     }
@@ -211,12 +224,14 @@ int sip_router_init(void) {
 }
 
 struct call_session *sip_router_find_call(struct string_view const call_id) {
+    struct call_session **arr = __atomic_load_n(&active_calls, __ATOMIC_ACQUIRE);
     for (size_t i = 0; i < g_config.max_calls; ++i) {
-        auto const session = active_calls[i];
+        auto const session = __atomic_load_n(&arr[i], __ATOMIC_ACQUIRE);
         if (session != nullptr && session->is_active) {
             if (session->call_id_len == call_id.length &&
                 memcmp(session->call_id_buf, call_id.data, call_id.length) == 0)
             {
+                __atomic_fetch_add(&session->refcount, 1, __ATOMIC_RELAXED);
                 return session;
             }
         }
@@ -225,12 +240,14 @@ struct call_session *sip_router_find_call(struct string_view const call_id) {
 }
 
 struct call_session *sip_router_find_call_by_internal_id(struct string_view const internal_id) {
+    struct call_session **arr = __atomic_load_n(&active_calls, __ATOMIC_ACQUIRE);
     for (size_t i = 0; i < g_config.max_calls; ++i) {
-        auto const session = active_calls[i];
+        auto const session = __atomic_load_n(&arr[i], __ATOMIC_ACQUIRE);
         if (session != nullptr && session->is_active) {
             if (session->internal_id_len == internal_id.length &&
                 memcmp(session->internal_id_buf, internal_id.data, internal_id.length) == 0)
             {
+                __atomic_fetch_add(&session->refcount, 1, __ATOMIC_RELAXED);
                 return session;
             }
         }
@@ -239,12 +256,14 @@ struct call_session *sip_router_find_call_by_internal_id(struct string_view cons
 }
 
 size_t sip_router_active_call_count(void) {
-    if (active_calls == nullptr)
+    struct call_session **arr = __atomic_load_n(&active_calls, __ATOMIC_ACQUIRE);
+    if (arr == nullptr)
         return 0;
 
     size_t count = 0;
     for (size_t i = 0; i < g_config.max_calls; ++i) {
-        if (active_calls[i] != nullptr && active_calls[i]->is_active) {
+        struct call_session *s = __atomic_load_n(&arr[i], __ATOMIC_ACQUIRE);
+        if (s != nullptr && s->is_active) {
             count++;
         }
     }
@@ -301,11 +320,20 @@ static struct call_session *create_call(struct string_view const call_id) {
     generate_uuid(session->internal_id_buf);
     session->internal_id_len = 36;
     session->is_active       = true;
+    session->refcount        = 2;
 
     // Insert into active calls
+    struct call_session **arr = __atomic_load_n(&active_calls, __ATOMIC_ACQUIRE);
     for (size_t i = 0; i < g_config.max_calls; ++i) {
-        if (active_calls[i] == nullptr) {
-            active_calls[i] = session;
+        struct call_session *expected = nullptr;
+        if (__atomic_compare_exchange_n(
+                &arr[i],
+                &expected,
+                session,
+                false,
+                __ATOMIC_ACQ_REL,
+                __ATOMIC_RELAXED))
+        {
             return session;
         }
     }
@@ -328,13 +356,23 @@ static void destroy_call(struct call_session *const session) {
         ws_bridge_close(session);
     }
 
+    // Remove from active calls
+    struct call_session **arr = __atomic_load_n(&active_calls, __ATOMIC_ACQUIRE);
     for (size_t i = 0; i < g_config.max_calls; ++i) {
-        if (active_calls[i] == session) {
-            active_calls[i] = nullptr;
+        if (__atomic_load_n(&arr[i], __ATOMIC_ACQUIRE) == session) {
+            __atomic_store_n(&arr[i], nullptr, __ATOMIC_RELEASE);
             break;
         }
     }
-    pool_free(call_pool, session);
+    call_release(session);
+}
+
+void call_release(struct call_session *call) {
+    if (call == nullptr)
+        return;
+    if (__atomic_fetch_sub(&call->refcount, 1, __ATOMIC_ACQ_REL) == 1) {
+        pool_free(call_pool, call);
+    }
 }
 
 struct call_session *sip_router_process(struct sip_message const *restrict const msg) {
@@ -406,6 +444,7 @@ struct call_session *sip_router_process(struct sip_message const *restrict const
                 (int)msg->call_id.length,
                 msg->call_id.data);
             destroy_call(session);
+            call_release(session);
         }
         return nullptr;
     }
@@ -541,6 +580,9 @@ void sip_router_process_recv(struct io_event_ctx *restrict const ctx, size_t con
                 LOGERR("SIP Router: Failed to generate SIP response");
             }
         }
+        if (session != nullptr) {
+            call_release(session);
+        }
     } else {
         LOGERR("SIP Router: Failed to parse incoming SIP message");
     }
@@ -561,9 +603,9 @@ void sip_router_cleanup(void) {
         close(sip_fd);
         sip_fd = -1;
     }
-    if (active_calls != nullptr) {
-        free((void *)active_calls);
-        active_calls = nullptr;
+    auto old_arr = __atomic_exchange_n(&active_calls, nullptr, __ATOMIC_ACQ_REL);
+    if (old_arr != nullptr) {
+        free(old_arr);
     }
     if (call_pool != nullptr) {
         pool_destroy(call_pool);

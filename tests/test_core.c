@@ -88,23 +88,40 @@ static void test_config(void) {
     unsetenv("RTP_EXTERNAL_ADDR");
     unsetenv("RTP_MIN_PORT");
     unsetenv("RTP_MAX_PORT");
+    unsetenv("WS_LISTEN_PORT");
+    unsetenv("WS_EXTERNAL_PORT");
 
     auto res = config_load();
     assert(res == 0 && "Config should succeed with defaults");
     assert(g_config.rtp_min_port == 16000);
     assert(g_config.rtp_max_port == 32000);
+    assert(g_config.ws_listen_port == 8080);
+    assert(g_config.ws_external_port == 8080);
 
     setenv("SIP_LISTEN_ADDR", "0.0.0.0", 1);
     setenv("SIP_EXTERNAL_ADDR", "1.2.3.4", 1);
     setenv("RTP_EXTERNAL_ADDR", "1.2.3.4", 1);
     setenv("RTP_MIN_PORT", "10000", 1);
     setenv("RTP_MAX_PORT", "20000", 1);
+    setenv("WS_LISTEN_PORT", "9000", 1);
 
     res = config_load();
     assert(res == 0 && "Config should succeed with env vars");
 
     assert(g_config.rtp_min_port == 10000);
     assert(g_config.rtp_max_port == 20000);
+    assert(g_config.ws_listen_port == 9000);
+    assert(g_config.ws_external_port == 9000);
+
+    setenv("WS_EXTERNAL_PORT", "9500", 1);
+    res = config_load();
+    assert(res == 0 && "Config should succeed with explicit WS_EXTERNAL_PORT");
+    assert(g_config.ws_listen_port == 9000);
+    assert(g_config.ws_external_port == 9500);
+
+    unsetenv("WS_LISTEN_PORT");
+    unsetenv("WS_EXTERNAL_PORT");
+
     printf("Config test passed.\n");
 }
 

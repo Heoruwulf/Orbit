@@ -10,6 +10,6 @@ node index.js \
     --client-rtp-port-base 25000 \
     --client-sip-port 5061 \
     --event-port 9000 \
-    --calls 1000 \
-    --call-rate 50 \
+    --calls 4000 \
+    --call-rate 100 \
     --record one

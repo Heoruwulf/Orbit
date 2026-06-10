@@ -32,35 +32,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "orbit/thread.h"
 #include "orbit/ws_bridge.h"
 
-struct rtp_port_manager {
-    uint16_t *free_ports;
-    size_t    head;
-    size_t    max_ports;
-};
-
-static thread_local struct rtp_port_manager g_port_mgr      = {};
-static thread_local mem_pool_t             *rtp_buffer_pool = nullptr;
-static thread_local mem_pool_t             *rtp_ctx_pool    = nullptr;
+static size_t                   g_next_port_offset = 0;
+static thread_local mem_pool_t *rtp_buffer_pool    = nullptr;
+static thread_local mem_pool_t *rtp_ctx_pool       = nullptr;
 
 constexpr size_t RTP_BUFFER_SIZE = 1500;
 
 int rtp_engine_init(void) {
     if (g_config.rtp_min_port > g_config.rtp_max_port)
         return -1;
-
-    size_t const total_ports = (size_t)(g_config.rtp_max_port - g_config.rtp_min_port + 1);
-    int const    w_count     = worker_get_count();
-    size_t const workers     = (size_t)(w_count > 0 ? w_count : 1);
-    size_t const id          = (size_t)(worker_get_id() >= 0 ? worker_get_id() : 0);
-    size_t const count       = total_ports / workers;
-
-    uint16_t const worker_min_port = (uint16_t)(g_config.rtp_min_port + (id * count));
-
-    g_port_mgr.free_ports = (uint16_t *)calloc(count, sizeof(uint16_t));
-    if (g_port_mgr.free_ports == nullptr) {
-        LOGERR("RTP Engine: Failed to allocate free_ports array");
-        return -1;
-    }
 
     rtp_buffer_pool = pool_create(
         (struct pool_config){.object_size = RTP_BUFFER_SIZE, .count = g_config.max_calls * 2});
@@ -71,22 +51,10 @@ int rtp_engine_init(void) {
         return -1;
     }
 
-    g_port_mgr.max_ports = count;
-    g_port_mgr.head      = count; // Stack full
-
-    for (size_t i = 0; i < count; ++i) {
-        g_port_mgr.free_ports[i] = (uint16_t)(worker_min_port + i);
-    }
-
     return 0;
 }
 
 void rtp_engine_cleanup(void) {
-    free(g_port_mgr.free_ports);
-    g_port_mgr.free_ports = nullptr;
-    g_port_mgr.max_ports  = 0;
-    g_port_mgr.head       = 0;
-
     pool_destroy(rtp_buffer_pool);
     pool_destroy(rtp_ctx_pool);
     rtp_buffer_pool = nullptr;
@@ -96,41 +64,42 @@ void rtp_engine_cleanup(void) {
 int rtp_engine_allocate_port(
     struct call_session *restrict const session,
     uint16_t *restrict const out_port) {
-    if (g_port_mgr.head == 0 || g_port_mgr.free_ports == nullptr) {
-        LOGERR("RTP Engine: No free RTP ports available");
-        return -1; // Empty
-    }
 
-    g_port_mgr.head--;
-    uint16_t const port = g_port_mgr.free_ports[g_port_mgr.head];
+    size_t const total_ports = (size_t)(g_config.rtp_max_port - g_config.rtp_min_port + 1);
+    int          fd          = -1;
+    uint16_t     port        = 0;
 
-    int const fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd < 0) {
-        LOGERR("RTP Engine: Failed to create socket for RTP port %u", port);
-        // Rollback
-        g_port_mgr.head++;
-        return -1;
-    }
+    for (size_t i = 0; i < total_ports; ++i) {
+        size_t const offset = __atomic_fetch_add(&g_next_port_offset, 1, __ATOMIC_RELAXED);
+        port                = (uint16_t)(g_config.rtp_min_port + (offset % total_ports));
 
-    // Set non-blocking
-    int const flags = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        fd = socket(AF_INET, SOCK_DGRAM, 0);
+        if (fd < 0)
+            continue;
 
-    int const opt = 1;
-    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        int const flags = fcntl(fd, F_GETFL, 0);
+        fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 
-    struct sockaddr_in addr = {0};
-    addr.sin_family         = AF_INET;
-    inet_pton(
-        AF_INET,
-        g_config.rtp_listen_addr ? g_config.rtp_listen_addr : "0.0.0.0",
-        &addr.sin_addr);
-    addr.sin_port = htons(port);
+        int const opt = 1;
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
-    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        LOGERR("RTP Engine: Failed to bind RTP port %u", port);
+        struct sockaddr_in addr = {0};
+        addr.sin_family         = AF_INET;
+        inet_pton(
+            AF_INET,
+            g_config.rtp_listen_addr ? g_config.rtp_listen_addr : "0.0.0.0",
+            &addr.sin_addr);
+        addr.sin_port = htons(port);
+
+        if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
+            break; // Successfully bound
+        }
         close(fd);
-        g_port_mgr.head++;
+        fd = -1;
+    }
+
+    if (fd < 0) {
+        LOGERR("RTP Engine: No free RTP ports available");
         return -1;
     }
 
@@ -161,7 +130,6 @@ int rtp_engine_allocate_port(
         if (ctx)
             pool_free(rtp_ctx_pool, ctx);
         close(fd);
-        g_port_mgr.head++;
         return -1;
     }
 
@@ -174,10 +142,6 @@ void rtp_engine_free_port(int const fd, uint16_t const port) {
     if (fd >= 0) {
         LOGINF("RTP Engine: Freeing port %u", port);
         close(fd);
-    }
-    if (g_port_mgr.head < g_port_mgr.max_ports && g_port_mgr.free_ports != nullptr) {
-        g_port_mgr.free_ports[g_port_mgr.head] = port;
-        g_port_mgr.head++;
     }
 }
 

@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <sys/signalfd.h>
 #include <unistd.h>
 #include "orbit/config.h"
@@ -33,9 +34,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "orbit/ws_bridge.h"
 
 #ifdef NDEBUG
-    constexpr char const BUILD_TYPE[] = "release";
+constexpr char const BUILD_TYPE[] = "release";
 #else
-    constexpr char const BUILD_TYPE[] = "debug";
+constexpr char const BUILD_TYPE[] = "debug";
 #endif
 
 static void print_version(void) {
@@ -43,7 +44,7 @@ static void print_version(void) {
     printf("Built on: %s %s\n", ORBIT_BUILD_DATE, ORBIT_BUILD_TIME);
 }
 
-static void parse_cli_args(int const argc, char * const argv[]) {
+static void parse_cli_args(int const argc, char *const argv[]) {
     for (int i = 1; i < argc; ++i) {
         auto const arg = argv[i];
         if (strcmp(arg, "-v") == 0 || strcmp(arg, "--version") == 0) {
@@ -54,7 +55,12 @@ static void parse_cli_args(int const argc, char * const argv[]) {
 }
 
 static void log_version_info(void) {
-    LOGINF("Orbit %s (%s build, built on %s at %s).", ORBIT_VERSION, BUILD_TYPE, ORBIT_BUILD_DATE, ORBIT_BUILD_TIME);
+    LOGINF(
+        "Orbit %s (%s build, built on %s at %s).",
+        ORBIT_VERSION,
+        BUILD_TYPE,
+        ORBIT_BUILD_DATE,
+        ORBIT_BUILD_TIME);
 }
 
 int main(int argc, char *argv[]) {
@@ -73,12 +79,25 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-    if (worker_pool_init() < 0) {
-        LOGERR("Supervisor: Failed to initialize worker pool.");
-        return EXIT_FAILURE;
+    struct rlimit rl;
+    if (getrlimit(RLIMIT_NOFILE, &rl) == 0) {
+        rlim_t const required_fds = (g_config.max_calls * 4) + 1024;
+        if (rl.rlim_cur < required_fds) {
+            if (rl.rlim_max >= required_fds) {
+                rl.rlim_cur = required_fds;
+                setrlimit(RLIMIT_NOFILE, &rl);
+                LOGINF("Increased RLIMIT_NOFILE to %lu", (unsigned long)rl.rlim_cur);
+            } else {
+                rl.rlim_cur = rl.rlim_max;
+                setrlimit(RLIMIT_NOFILE, &rl);
+                LOGERR(
+                    "WARNING: RLIMIT_NOFILE max (%lu) is less than required (%lu). You may "
+                    "experience 'Too many open files' under high load.",
+                    (unsigned long)rl.rlim_max,
+                    (unsigned long)required_fds);
+            }
+        }
     }
-
-    LOGINF("Starting orbit supervisor...");
 
     sigset_t mask;
     sigemptyset(&mask);
@@ -89,6 +108,13 @@ int main(int argc, char *argv[]) {
         LOGERR("Supervisor: Failed to set sigprocmask");
         return EXIT_FAILURE;
     }
+
+    if (worker_pool_init() < 0) {
+        LOGERR("Supervisor: Failed to initialize worker pool.");
+        return EXIT_FAILURE;
+    }
+
+    LOGINF("Starting orbit supervisor...");
 
     int sig_fd = signalfd(-1, &mask, 0);
     if (sig_fd >= 0) {

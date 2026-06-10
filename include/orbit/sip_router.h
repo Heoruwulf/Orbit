@@ -109,7 +109,9 @@ struct sip_message {
 };
 
 struct call_session {
-    bool                  is_active;
+    alignas(64) bool is_active;
+    bool                  lock;
+    int                   refcount;
     bool                  has_learned_remote_addr;
     int                   rtp_fd;
     uint16_t              tx_seq_num;
@@ -127,6 +129,24 @@ struct call_session {
 };
 
 // API
+static inline void call_lock(struct call_session *call) {
+    if (call == nullptr)
+        return;
+    while (__atomic_test_and_set(&call->lock, __ATOMIC_ACQUIRE)) {
+#if defined(__x86_64__)
+        __asm__ volatile("pause" ::: "memory");
+#endif
+    }
+}
+
+static inline void call_unlock(struct call_session *call) {
+    if (call == nullptr)
+        return;
+    __atomic_clear(&call->lock, __ATOMIC_RELEASE);
+}
+
+void call_release(struct call_session *call);
+
 int        sip_router_init(void);
 void       sip_router_cleanup(void);
 size_t     sip_router_active_call_count(void);

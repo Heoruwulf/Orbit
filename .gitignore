@@ -7,3 +7,5 @@ test_client/node_modules/
 compile_commands.json
 *.wav
 *.raw
+*.md
+!README.md

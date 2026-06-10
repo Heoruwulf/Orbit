@@ -5,7 +5,8 @@
             "includePath": [
                 "${workspaceFolder}/src/**",
                 "${workspaceFolder}/include/**",
-                "${workspaceFolder}/vendor/**"
+                "${workspaceFolder}/vendor/**",
+                "${workspaceFolder}/build/generated/include/**"
             ],
             "defines": [
                 "_GNU_SOURCE",

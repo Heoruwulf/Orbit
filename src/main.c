@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/signalfd.h>
 #include <unistd.h>
 #include "orbit/config.h"
@@ -28,19 +29,44 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "orbit/server.h"
 #include "orbit/sip_router.h"
 #include "orbit/thread.h"
+#include "orbit/version.h"
 #include "orbit/ws_bridge.h"
 
-int main(void) {
+#ifdef NDEBUG
+    constexpr char const BUILD_TYPE[] = "release";
+#else
+    constexpr char const BUILD_TYPE[] = "debug";
+#endif
+
+static void print_version(void) {
+    printf("Orbit %s (%s build)\n", ORBIT_VERSION, BUILD_TYPE);
+    printf("Built on: %s %s\n", ORBIT_BUILD_DATE, ORBIT_BUILD_TIME);
+}
+
+static void parse_cli_args(int const argc, char * const argv[]) {
+    for (int i = 1; i < argc; ++i) {
+        auto const arg = argv[i];
+        if (strcmp(arg, "-v") == 0 || strcmp(arg, "--version") == 0) {
+            print_version();
+            exit(EXIT_SUCCESS);
+        }
+    }
+}
+
+static void log_version_info(void) {
+    LOGINF("Orbit %s (%s build, built on %s at %s).", ORBIT_VERSION, BUILD_TYPE, ORBIT_BUILD_DATE, ORBIT_BUILD_TIME);
+}
+
+int main(int argc, char *argv[]) {
+    parse_cli_args(argc, argv);
+
     // Tune glibc memory allocator to never use mmap (force brk)
     // and never trim the heap. This ensures that the wslay warmup
     // memory stays allocated and prefaulted in the process.
     mallopt(M_MMAP_MAX, 0);
     mallopt(M_TRIM_THRESHOLD, -1);
-#ifdef NDEBUG
-    LOGINF("Running in release mode.");
-#else
-    LOGINF("Running in debug mode.");
-#endif
+
+    log_version_info();
 
     if (config_load() < 0) {
         LOGERR("Failed to load configuration. Check environment variables.");
@@ -80,6 +106,6 @@ int main(void) {
     worker_pool_stop_all();
     worker_pool_cleanup();
 
-    LOGINF("orbit stopped.");
+    LOGINF("orbit supervisor stopped.");
     return EXIT_SUCCESS;
 }

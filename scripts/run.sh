@@ -4,15 +4,15 @@ set -euo pipefail
 # Change to the root of the project
 cd "$(dirname "$0")/.." || exit 1
 
-# Export environment variables from .env file securely
-if [[ -f ".env" ]]; then
-    echo "[INFO] Loading .env file..."
+# Export environment variables from .env.local file securely
+if [[ -f ".env.local" ]]; then
+    echo "[INFO] Loading .env.local file..."
     set -a
     # shellcheck disable=SC1091
-    source .env
+    source .env.local
     set +a
 else
-    echo "[WARN] No .env file found. Relying on system/default configuration."
+    echo "[WARN] No .env.local file found. Relying on system/default configuration."
 fi
 
 # Ensure the logs directory exists

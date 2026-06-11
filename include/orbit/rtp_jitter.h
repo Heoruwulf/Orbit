@@ -40,10 +40,11 @@ struct jitter_node {
  * gaps, duplicates, and late packets gracefully.
  */
 struct jitter_buffer {
-    alignas(64) struct jitter_node slots[JITTER_BUFFER_SIZE]; /**< Fixed-size array of buffering packet slots. */
-    uint16_t next_pop_seq;                                    /**< The sequence number of the next expected packet to pop. */
-    bool     has_started;                                     /**< True if the buffer has received its initial packet. */
-    bool     has_popped;                                      /**< True if the caller has started popping packets. */
+    alignas(64) struct jitter_node
+        slots[JITTER_BUFFER_SIZE]; /**< Fixed-size array of buffering packet slots. */
+    uint16_t next_pop_seq;         /**< The sequence number of the next expected packet to pop. */
+    bool     has_started;          /**< True if the buffer has received its initial packet. */
+    bool     has_popped;           /**< True if the caller has started popping packets. */
 };
 
 /**
@@ -88,4 +89,3 @@ bool jitter_buffer_pop(
     struct jitter_buffer *restrict const jb,
     void **restrict out_buffer,
     size_t *restrict out_length);
-

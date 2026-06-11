@@ -17,6 +17,10 @@ Designed for raw speed, it uses a multi-ring Linux `io_uring` kernel event loop 
 - **Scatter-Gather I/O:** Packets are processed with zero-copy logic via `iovec`.
 - **Stateless SIP Routing:** Real-time SIP `INVITE` mapping, `SDP` parsing, and `OPTIONS` capability advertisement.
 - **WebSocket Bridge:** Natively bridges WebSocket binary audio payloads into valid RTP datagrams (and vice versa) utilizing `wslay`.
+- **Asynchronous Eventing:** Publishes real-time call lifecycle events (e.g., `call_answered`) asynchronously to protect the hot path. Supports three backends:
+  - **UDP:** Lightweight raw JSON event emission over UDP sockets.
+  - **Redis:** Publishes events directly to a configurable Redis Pub/Sub channel.
+  - **Kafka:** Produces events to a Kafka topic via a high-performance, asynchronous `librdkafka` producer.
 
 ## Architecture
 
@@ -88,8 +92,18 @@ Start the bridge by running the built executable. `orbit` relies heavily on envi
 | `WS_EXTERNAL_ADDR` | `127.0.0.1` | The public IP address the WebSocket server advertises (if applicable). |
 | `WS_LISTEN_PORT` | `8080` | The TCP port the WebSocket bridge binds and listens on. |
 | `WS_EXTERNAL_PORT` | `8080` | The public TCP port for the WebSocket server advertised in events. |
-| `EVENT_LISTEN_ADDR` | None | Optional. If provided, UDP bridge events will be sent to this IP. |
-| `EVENT_LISTEN_PORT` | `0` | Optional. If provided, UDP bridge events will be sent to this port. |
+| `EVENT_PROVIDER` | `udp` | The event provider backend to use (`udp`, `redis`, `kafka`, `mock`, `disabled`). |
+| `EVENT_QUEUE_CAPACITY` | `16384` | Maximum event queue capacity per worker thread. Must be between `MAX_CALLS` and `MAX_CALLS * 16`. |
+| `EVENT_UDP_LISTEN_ADDR` | None | Optional. If provided, UDP bridge events will be sent to this IP. |
+| `EVENT_UDP_LISTEN_PORT` | `0` | Optional. If provided, UDP bridge events will be sent to this port. |
+| `EVENT_REDIS_CHANNEL` | `orbit:events` | Target Redis Pub/Sub channel. |
+| `EVENT_REDIS_DATABASE` | `0` | Target Redis database number. |
+| `EVENT_REDIS_HOST` | `127.0.0.1` | Target Redis server IP address or hostname. |
+| `EVENT_REDIS_PASSWORD` | None | Optional. Redis password for authentication. |
+| `EVENT_REDIS_PORT` | `6379` | Target Redis server port. |
+| `EVENT_REDIS_USERNAME` | None | Optional. Redis username for ACL-based authentication. |
+| `EVENT_KAFKA_BROKERS` | `127.0.0.1:9092` | Comma-separated list of Kafka bootstrap brokers. |
+| `EVENT_KAFKA_TOPIC` | `orbit-events` | Target Kafka topic for publishing events. |
 | `MAX_CALLS` | `1024` | Optional. Sets the maximum number of calls this server will handle. |
 
 ## WebSocket Protocol
@@ -137,9 +151,15 @@ All media payloads are exchanged as **Binary Frames**.
 - **Client to Server**: Send raw audio payload bytes matching the negotiated codec (e.g., PCMU, OPUS). The server will automatically prepend the correct 12-byte RTP header and monotonically increasing sequence/timestamp data before dispatching it to the SIP endpoint via UDP.
 - **Server to Client**: The server intercepts incoming RTP packets, strips the 12-byte RTP header (and any extensions), and forwards purely the audio payload bytes to the client as a binary WebSocket frame.
 
-## UDP Event Schema
+## Event System & Schemas
 
-If `EVENT_LISTEN_ADDR` and `EVENT_LISTEN_PORT` are configured in the environment, the bridge will broadcast real-time call lifecycle events as raw JSON payloads over UDP. This enables headless backend applications to dynamically trace calls and trigger WebSocket handshakes.
+The bridge broadcasts real-time call lifecycle events as raw JSON payloads. Depending on the configured `EVENT_PROVIDER`, these events are delivered via:
+
+- **UDP:** Broadcasted as raw UDP datagrams to `EVENT_UDP_LISTEN_ADDR` / `EVENT_UDP_LISTEN_PORT`.
+- **Redis:** Published to the Redis Pub/Sub channel specified by `EVENT_REDIS_CHANNEL`.
+- **Kafka:** Produced asynchronously to the Kafka topic specified by `EVENT_KAFKA_TOPIC`.
+
+This enables external application servers (or the load test client) to dynamically trace call lifecycles and trigger WebSocket connections.
 
 ### `call_answered`
 

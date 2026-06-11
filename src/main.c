@@ -15,7 +15,6 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
-#include <malloc.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +22,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <sys/resource.h>
 #include <sys/signalfd.h>
 #include <unistd.h>
+
+#ifdef __GLIBC__
+#include <malloc.h>
+#endif
 #include "orbit/config.h"
 #include "orbit/event.h"
 #include "orbit/log.h"
@@ -42,6 +45,31 @@ constexpr char const BUILD_TYPE[] = "debug";
 static void print_version(void) {
     printf("Orbit %s (%s build)\n", ORBIT_VERSION, BUILD_TYPE);
     printf("Built on: %s %s\n", ORBIT_BUILD_DATE, ORBIT_BUILD_TIME);
+
+#ifdef __GLIBC__
+    printf("GLIBC: %d.%d\n", __GLIBC__, __GLIBC_MINOR__);
+#else
+    printf("GLIBC: unavailable\n");
+#endif
+
+    printf(
+        "Event features: UDP=%s, Redis=%s, Kafka=%s\n",
+#ifdef ORBIT_WITH_UDP
+        "enabled",
+#else
+        "disabled",
+#endif
+#ifdef ORBIT_WITH_REDIS
+        "enabled",
+#else
+        "disabled",
+#endif
+#ifdef ORBIT_WITH_KAFKA
+        "enabled"
+#else
+        "disabled"
+#endif
+    );
 }
 
 static void parse_cli_args(int const argc, char *const argv[]) {
@@ -66,11 +94,13 @@ static void log_version_info(void) {
 int main(int argc, char *argv[]) {
     parse_cli_args(argc, argv);
 
+#ifdef __GLIBC__
     // Tune glibc memory allocator to never use mmap (force brk)
     // and never trim the heap. This ensures that the wslay warmup
     // memory stays allocated and prefaulted in the process.
     mallopt(M_MMAP_MAX, 0);
     mallopt(M_TRIM_THRESHOLD, -1);
+#endif
 
     log_version_info();
 
@@ -90,8 +120,8 @@ int main(int argc, char *argv[]) {
             } else {
                 rl.rlim_cur = rl.rlim_max;
                 setrlimit(RLIMIT_NOFILE, &rl);
-                LOGERR(
-                    "WARNING: RLIMIT_NOFILE max (%lu) is less than required (%lu). You may "
+                LOGWRN(
+                    "RLIMIT_NOFILE max (%lu) is less than required (%lu). You may "
                     "experience 'Too many open files' under high load.",
                     (unsigned long)rl.rlim_max,
                     (unsigned long)required_fds);
@@ -109,8 +139,14 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
+    if (event_global_init() < 0) {
+        LOGERR("Supervisor: Failed to initialize global event system.");
+        return EXIT_FAILURE;
+    }
+
     if (worker_pool_init() < 0) {
         LOGERR("Supervisor: Failed to initialize worker pool.");
+        event_global_cleanup();
         return EXIT_FAILURE;
     }
 
@@ -131,6 +167,7 @@ int main(int argc, char *argv[]) {
     LOGINF("Shutting down workers...");
     worker_pool_stop_all();
     worker_pool_cleanup();
+    event_global_cleanup();
 
     LOGINF("orbit supervisor stopped.");
     return EXIT_SUCCESS;

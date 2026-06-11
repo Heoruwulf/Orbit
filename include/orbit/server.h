@@ -45,14 +45,14 @@ typedef enum event_type {
  * and endpoint addresses for processing event completions.
  */
 struct io_event_ctx {
-    event_type_t type;            /**< Type of the submitted asynchronous I/O operation. */
-    int          fd;              /**< Socket or signal file descriptor associated with the event. */
-    void *restrict buffer;        /**< Pointer to the primary data payload buffer. */
-    size_t               length;  /**< Size of the data payload buffer or written data size. */
+    event_type_t type;           /**< Type of the submitted asynchronous I/O operation. */
+    int          fd;             /**< Socket or signal file descriptor associated with the event. */
+    void *restrict buffer;       /**< Pointer to the primary data payload buffer. */
+    size_t               length; /**< Size of the data payload buffer or written data size. */
     struct call_session *session; /**< Associated call session context (or WebSocket session). */
     struct msghdr        msg;     /**< Message header for scatter/gather socket operations. */
-    struct iovec         iov;     /**< Single-element scatter/gather I/O vector referencing the buffer. */
-    struct sockaddr_in   remote_addr; /**< Source or destination IP socket address. */
+    struct iovec       iov; /**< Single-element scatter/gather I/O vector referencing the buffer. */
+    struct sockaddr_in remote_addr; /**< Source or destination IP socket address. */
 };
 
 /**
@@ -60,7 +60,7 @@ struct io_event_ctx {
  *
  * @return 0 on success, or -1 on initialization failure.
  */
-int  server_init(void);
+int server_init(void);
 
 /**
  * @brief Waits for a single completion queue event (CQE) and processes it.
@@ -131,4 +131,3 @@ int server_submit_accept(struct io_event_ctx *restrict const ctx);
  * @return Number of submitted SQEs on success, or -1 on failure.
  */
 int server_submit_send(struct io_event_ctx *restrict const ctx);
-

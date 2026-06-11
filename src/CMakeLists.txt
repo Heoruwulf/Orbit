@@ -10,6 +10,16 @@ file(GLOB_RECURSE SRC_FILES
 add_library(orbit_lib STATIC ${SRC_FILES})
 target_link_libraries(orbit_lib PUBLIC wslay yyjson)
 
+if(ENABLE_EVENT_REDIS)
+    target_link_libraries(orbit_lib PUBLIC ${HIREDIS_LIBRARIES})
+    target_include_directories(orbit_lib PUBLIC ${HIREDIS_INCLUDE_DIRS})
+endif()
+
+if(ENABLE_EVENT_KAFKA)
+    target_link_libraries(orbit_lib PUBLIC ${RDKAFKA_LIBRARIES})
+    target_include_directories(orbit_lib PUBLIC ${RDKAFKA_INCLUDE_DIRS})
+endif()
+
 # Dynamic version header generation target
 add_custom_target(generate_version_header
     BYPRODUCTS "${CMAKE_BINARY_DIR}/generated/include/orbit/version.h"

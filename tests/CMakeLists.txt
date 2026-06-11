@@ -4,6 +4,7 @@ set(TEST_SRCS
     test_sip.c
     test_rtp.c
     test_ws.c
+    test_event.c
 )
 
 foreach(test_src IN LISTS TEST_SRCS)
@@ -18,7 +19,7 @@ foreach(test_src IN LISTS TEST_SRCS)
     # Ensure assertions are enabled in tests even in Release mode to prevent unused variable errors
     target_compile_options(${test_name} PRIVATE "-UNDEBUG")
     
-    if("${test_name}" STREQUAL "test_core")
+    if("${test_name}" STREQUAL "test_core" OR "${test_name}" STREQUAL "test_event")
         # 🚨 THE ENFORCER: Wrap malloc and free
         target_link_options(${test_name} PRIVATE
             "-Wl,--wrap=malloc"

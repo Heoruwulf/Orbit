@@ -31,7 +31,7 @@ struct io_event_ctx;
  *
  * @return 0 on success, or -1 on memory pool allocation failure.
  */
-int  rtp_engine_init(void);
+int rtp_engine_init(void);
 
 /**
  * @brief Cleans up and destroys the RTP engine thread-local memory pools.
@@ -193,4 +193,3 @@ int rtp_engine_allocate_port(
  * @param port The UDP port to free.
  */
 void rtp_engine_free_port(int const fd, uint16_t const port);
-

@@ -47,7 +47,11 @@ const options = {
     callRate: 10, // Calls per second
     record: 'none', // 'all', 'one', 'none'
     recordDir: './recordings',
-    listenOnly: false
+    listenOnly: false,
+    redisUri: null,
+    redisChannel: 'orbit:events',
+    kafkaBrokers: null,
+    kafkaTopic: 'orbit-events'
 };
 
 for (let i = 0; i < args.length; i++) {
@@ -64,6 +68,10 @@ for (let i = 0; i < args.length; i++) {
     else if (arg === '--record') options.record = args[++i];
     else if (arg === '--record-dir') options.recordDir = args[++i];
     else if (arg === '--listen-only') options.listenOnly = true;
+    else if (arg === '--redis-uri') options.redisUri = args[++i];
+    else if (arg === '--redis-channel') options.redisChannel = args[++i];
+    else if (arg === '--kafka-brokers') options.kafkaBrokers = args[++i];
+    else if (arg === '--kafka-topic') options.kafkaTopic = args[++i];
     else if (arg === '--help') {
         console.log(`
 Usage: node index.js [options]
@@ -75,6 +83,10 @@ Options:
   --client-rtp-port-base <port> Base port for RTP (default: 15000)
   --client-sip-port <port>      Client SIP listen port (default: 5061)
   --event-port <port>           UDP port to listen for bridge events (default: 9000)
+  --redis-uri <uri>             Redis URI to connect to (default: none, listens via UDP)
+  --redis-channel <channel>     Redis channel to subscribe to (default: orbit:events)
+  --kafka-brokers <brokers>     Comma-separated list of Kafka bootstrap brokers (default: none)
+  --kafka-topic <topic>         Kafka topic to subscribe to (default: orbit-events)
   --input-file <path>           Input raw audio file (default: ../input_l16be_16000_mono.raw)
   --calls <number>              Number of concurrent calls to simulate (default: 1)
   --call-rate <number>          Calls to initiate per second (default: 10)
@@ -105,11 +117,9 @@ try {
 // Active calls map: Call-ID -> Call instance
 const activeCalls = new Map();
 
-// Single Event Listener
-const eventServer = dgram.createSocket('udp4');
-eventServer.on('message', (msg) => {
+// --- Event Subscription / Listening ---
+function handleEventMessage(msgStr) {
     try {
-        const msgStr = msg.toString();
         console.log(`[EVENT] Received event: ${msgStr}`);
         const payload = JSON.parse(msgStr);
         if (payload.event === 'call_answered' && payload.ws_url && payload.call_id) {
@@ -129,22 +139,80 @@ eventServer.on('message', (msg) => {
     } catch (e) {
         console.error('[EVENT] Failed to parse event JSON:', e);
     }
-});
-eventServer.bind(options.eventPort, '0.0.0.0', () => {
-    console.log(`[EVENT] Listening for bridge events on UDP port ${options.eventPort}`);
-});
+}
 
-// Single SIP Stack Listener
-sip.start({ port: options.clientSipPort }, (rq) => {
-    // We ignore unexpected incoming SIP requests for this test client
-});
+let redisClient = null;
+let kafkaConsumer = null;
 
-// Global RTP Ticker
-setInterval(() => {
-    for (const call of activeCalls.values()) {
-        call.tickRtp();
+async function startEventSubscriber() {
+    if (options.kafkaBrokers) {
+        const { Kafka } = require('kafkajs');
+        const kafka = new Kafka({
+            clientId: 'orbit-load-test',
+            brokers: options.kafkaBrokers.split(',')
+        });
+        const groupId = `orbit-load-test-${crypto.randomUUID()}`;
+        kafkaConsumer = kafka.consumer({ groupId });
+        await kafkaConsumer.connect();
+        console.log(`[KAFKA] Connected to brokers: ${options.kafkaBrokers}`);
+
+        await kafkaConsumer.subscribe({ topic: options.kafkaTopic, fromBeginning: false });
+        console.log(`[KAFKA] Subscribed to topic ${options.kafkaTopic}`);
+
+        const joinedGroup = new Promise((resolve) => {
+            kafkaConsumer.on(kafkaConsumer.events.GROUP_JOIN, (event) => {
+                console.log(`[KAFKA] Joined consumer group: ${event.payload.groupId}`);
+                resolve();
+            });
+        });
+
+        await kafkaConsumer.run({
+            eachMessage: async ({ message }) => {
+                if (message.value) {
+                    handleEventMessage(message.value.toString());
+                }
+            }
+        });
+
+        await joinedGroup;
+    } else if (options.redisUri) {
+        const redis = require('redis');
+        redisClient = redis.createClient({ url: options.redisUri });
+        redisClient.on('error', (err) => console.error('[REDIS] Client Error:', err));
+        await redisClient.connect();
+        console.log(`[REDIS] Connected to ${options.redisUri}`);
+
+        await redisClient.subscribe(options.redisChannel, (message) => {
+            handleEventMessage(message);
+        });
+        console.log(`[REDIS] Subscribed to channel ${options.redisChannel}`);
+    } else {
+        const eventServer = dgram.createSocket('udp4');
+        eventServer.on('message', (msg) => {
+            handleEventMessage(msg.toString());
+        });
+        eventServer.bind(options.eventPort, '0.0.0.0', () => {
+            console.log(`[EVENT] Listening for bridge events on UDP port ${options.eventPort}`);
+        });
     }
-}, 20);
+}
+
+// We will initialize the subscriber first, then start the SIP stack and spawning of calls.
+async function init() {
+    await startEventSubscriber();
+
+    // Single SIP Stack Listener
+    sip.start({ port: options.clientSipPort }, (rq) => {
+        // We ignore unexpected incoming SIP requests for this test client
+    });
+
+    // Global RTP Ticker
+    setInterval(() => {
+        for (const call of activeCalls.values()) {
+            call.tickRtp();
+        }
+    }, 20);
+}
 
 class Call {
     constructor(index) {
@@ -346,6 +414,12 @@ process.on('SIGINT', () => {
     for (const call of activeCalls.values()) {
         call.endCall();
     }
+    if (redisClient) {
+        redisClient.quit().catch(() => {});
+    }
+    if (kafkaConsumer) {
+        kafkaConsumer.disconnect().catch(() => {});
+    }
     // Give SIP BYE requests a moment to hit the network before fully exiting
     setTimeout(() => process.exit(0), 500);
 });
@@ -369,10 +443,21 @@ function spawnNextCall() {
     }
 }
 
-// Start spawning calls
-if (options.listenOnly) {
-    console.log(`[INFO] Starting in listen-only mode. Waiting for events on UDP port ${options.eventPort}`);
-} else {
-    console.log(`[INFO] Starting ${options.calls} calls at ${options.callRate} calls/sec`);
-    setTimeout(spawnNextCall, 1000);
-}
+init().then(() => {
+    // Start spawning calls
+    if (options.listenOnly) {
+        if (options.kafkaBrokers) {
+            console.log(`[INFO] Starting in listen-only mode. Waiting for events on Kafka topic ${options.kafkaTopic}`);
+        } else if (options.redisUri) {
+            console.log(`[INFO] Starting in listen-only mode. Waiting for events on Redis channel ${options.redisChannel}`);
+        } else {
+            console.log(`[INFO] Starting in listen-only mode. Waiting for events on UDP port ${options.eventPort}`);
+        }
+    } else {
+        console.log(`[INFO] Starting ${options.calls} calls at ${options.callRate} calls/sec`);
+        setTimeout(spawnNextCall, 1000);
+    }
+}).catch((err) => {
+    console.error('[FATAL] Failed to start:', err);
+    process.exit(1);
+});

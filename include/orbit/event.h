@@ -20,7 +20,25 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "orbit/config.h"
 #include "orbit/sip_router.h"
 
+/**
+ * @brief Initializes the UDP event publisher socket and target address.
+ *
+ * Sets up a non-blocking UDP socket and parses the configured event address
+ * and port if both are specified in the global configuration.
+ */
 void event_init(void);
+
+/**
+ * @brief Publishes a JSON-serialized call answered event over UDP.
+ *
+ * Serializes the SIP call details (Call-ID, From, To tags, custom headers)
+ * and the generated WebSocket URL into a JSON payload using a zero-allocation
+ * memory pool, then sends it to the configured event collector.
+ *
+ * @param msg The parsed incoming SIP message triggering the event.
+ * @param internal_id The unique internal UUID string view assigned to the call.
+ */
 void event_publish_call_answered(
     struct sip_message const *restrict const msg,
     struct string_view const internal_id);
+

@@ -98,7 +98,13 @@ struct call_session {
     char                  call_id_buf[128];
 };
 
-// API
+/**
+ * @brief Acquires an atomic spinlock on a call session.
+ *
+ * Blocks using CPU pause hints until the session lock is acquired.
+ *
+ * @param call The call session to lock.
+ */
 static inline void call_lock(struct call_session *call) {
     if (call == nullptr)
         return;
@@ -109,23 +115,103 @@ static inline void call_lock(struct call_session *call) {
     }
 }
 
+/**
+ * @brief Releases the atomic spinlock on a call session.
+ *
+ * @param call The call session to unlock.
+ */
 static inline void call_unlock(struct call_session *call) {
     if (call == nullptr)
         return;
     __atomic_clear(&call->lock, __ATOMIC_RELEASE);
 }
 
+/**
+ * @brief Decrements the call session reference count and releases it if zero.
+ *
+ * If the reference count drops to zero, the call session resources are freed back
+ * to the call pool.
+ *
+ * @param call The call session pointer to release.
+ */
 void call_release(struct call_session *call);
 
+/**
+ * @brief Initializes the SIP router structure, socket, and memory pools.
+ *
+ * Allocates the active call array, creates the call memory pool, opens and binds
+ * the SIP UDP socket, and submits an initial recvmsg to the server loop.
+ *
+ * @return 0 on success, or -1 on failure.
+ */
 int        sip_router_init(void);
+
+/**
+ * @brief Cleans up and frees all SIP router resources and socket.
+ */
 void       sip_router_cleanup(void);
+
+/**
+ * @brief Counts the total number of active call sessions.
+ *
+ * @return The current number of active calls.
+ */
 size_t     sip_router_active_call_count(void);
+
+/**
+ * @brief Parses the SIP verb/method from a method string view.
+ *
+ * Matches strings such as "INVITE", "ACK", "CANCEL", "BYE", "OPTIONS", or "SIP/2.0".
+ *
+ * @param method The method string view.
+ * @return The corresponding sip_verb_t enumeration value.
+ */
 sip_verb_t sip_parse_verb(struct string_view const method);
+
+/**
+ * @brief Parses a raw SIP message string.
+ *
+ * Extracts the start line verb, parses all header lines (including Call-ID, From,
+ * To, CSeq, Via, and X- custom headers), and locates the body segment.
+ *
+ * @param raw The raw SIP message data string view.
+ * @param out_msg Pointer to the sip_message structure to populate.
+ * @return true if parsing succeeds, or false otherwise.
+ */
 bool sip_parse_message(struct string_view const raw, struct sip_message *restrict const out_msg);
+
+/**
+ * @brief Parses a raw SDP body string view to extract media information.
+ *
+ * Extracts the media connection IP address, media port, codec payload mappings
+ * (for Opus, PCMU, PCMA, L16, DTMF telephone-events), channels, sample rates, and ptime.
+ *
+ * @param body The raw SDP text string view.
+ * @param out_info Pointer to the sdp_media_info structure to populate.
+ * @return true if a valid connection IP and port are negotiated, or false otherwise.
+ */
 bool sdp_parse(struct string_view const body, struct sdp_media_info *restrict const out_info);
+
+/**
+ * @brief Processes an incoming parsed SIP message within the call routing logic.
+ *
+ * Maps messages to existing sessions or spawns new call_session instances
+ * (on INVITE). Handles session destruction on BYE or CANCEL.
+ *
+ * @param msg The parsed SIP message context.
+ * @return The associated active call session pointer, or nullptr if none/destroyed.
+ */
 struct call_session *sip_router_process(struct sip_message const *restrict const msg);
 
-// Helper function to resolve RTP codec names for standard VoIP and WebRTC codecs
+/**
+ * @brief Helper function to resolve the human-readable codec name.
+ *
+ * Matches the payload type against standard and SDP-negotiated audio codecs.
+ *
+ * @param pt The payload type index.
+ * @param sdp Pointer to the session SDP media info context.
+ * @return A static string pointer representing the codec name.
+ */
 static inline char const *
 rtp_get_codec_name(uint8_t const pt, struct sdp_media_info const *restrict const sdp) {
     if (sdp != nullptr) {
@@ -193,23 +279,66 @@ rtp_get_codec_name(uint8_t const pt, struct sdp_media_info const *restrict const
     }
 }
 
-// Find an existing call by Call-ID.
+/**
+ * @brief Finds an active call session by its external SIP Call-ID.
+ *
+ * Increments the reference count of the returned call session if found.
+ *
+ * @param call_id The SIP Call-ID string view.
+ * @return The call session pointer, or nullptr if not found.
+ */
 struct call_session *sip_router_find_call(struct string_view const call_id);
 
-// Find an existing call by Internal ID.
+/**
+ * @brief Finds an active call session by its internal UUID string view.
+ *
+ * Increments the reference count of the returned call session if found.
+ *
+ * @param internal_id The internal UUID string view.
+ * @return The call session pointer, or nullptr if not found.
+ */
 struct call_session *sip_router_find_call_by_internal_id(struct string_view const internal_id);
 
-// Generates the 200 OK SDP body into a zero-allocation buffer.
-// Returns the length of the written string, or 0 if buffer is too small.
+/**
+ * @brief Generates the 200 OK SDP answer body.
+ *
+ * Writes the negotiated media attributes (codecs, ports) based on the session details
+ * into a zero-allocation buffer.
+ *
+ * @param session The call session context containing negotiated ports.
+ * @param buffer Output buffer where the SDP string will be written.
+ * @param max_len Maximum writable length of the output buffer.
+ * @return Length of the written string, or 0 if the buffer is too small.
+ */
 size_t sdp_generate_reply(
     struct call_session const *restrict const session,
     char *restrict const buffer,
     size_t const max_len);
 
+/**
+ * @brief Generates a generic SDP capabilities reply string.
+ *
+ * Writes a default list of supported codecs to the output buffer.
+ *
+ * @param buffer Output buffer where the capabilities SDP will be written.
+ * @param max_len Maximum writable length of the output buffer.
+ * @return Length of the written string, or 0 if the buffer is too small.
+ */
 size_t sdp_generate_capabilities_reply(char *restrict const buffer, size_t const max_len);
 
-// Generates a SIP response (e.g., "SIP/2.0 200 OK") based on the incoming request.
-// Injects the provided SDP body if sdp_body.length > 0.
+/**
+ * @brief Generates a standard SIP response string.
+ *
+ * Formats headers based on the original request context and appends the SDP body.
+ *
+ * @param req The original SIP request message context.
+ * @param status_code The SIP response status code (e.g., 200, 486, 503).
+ * @param reason_phrase The text description of the status code.
+ * @param sdp_body The optional SDP body to append.
+ * @param buffer Output buffer where the SIP response will be formatted.
+ * @param max_len Maximum writable length of the output buffer.
+ * @return Length of the formatted SIP response, or 0 if the buffer is too small.
+ */
 size_t sip_generate_response(
     struct sip_message const *restrict const req,
     int const status_code,
@@ -218,5 +347,23 @@ size_t sip_generate_response(
     char *restrict const buffer,
     size_t const max_len);
 
+/**
+ * @brief Processes a completed SIP packet receive operation.
+ *
+ * Parses the incoming SIP packet, processes it, formats/submits a response
+ * (e.g., to INVITE, OPTIONS, BYE) via io_uring, and re-submits a recv event.
+ *
+ * @param ctx The IO event context representing the read operation.
+ * @param len The size of the received packet payload in bytes.
+ */
 void sip_router_process_recv(struct io_event_ctx *restrict const ctx, size_t const len);
+
+/**
+ * @brief Handles the completion of an asynchronous SIP send operation.
+ *
+ * Currently a no-op handler.
+ *
+ * @param ctx The IO event context representing the send operation.
+ */
 void sip_router_process_send(struct io_event_ctx *restrict const ctx);
+

@@ -37,21 +37,46 @@ struct jitter_buffer {
     bool     has_popped;
 };
 
-// Initializes the jitter buffer struct (zeroes it out)
+/**
+ * @brief Initializes the jitter buffer structure to default empty state.
+ *
+ * Zeroes out the slots and status variables.
+ *
+ * @param jb The jitter buffer structure pointer to initialize.
+ */
 void jitter_buffer_init(struct jitter_buffer *restrict const jb);
 
-// Pushes a raw RTP packet payload into the jitter buffer.
-// If it's too old or a duplicate, returns false.
-// If it succeeds, the jitter buffer takes ownership of the buffer pointer.
+/**
+ * @brief Pushes a raw received RTP packet into the jitter buffer.
+ *
+ * Extracts the packet sequence number, checks if it is within the active buffering
+ * window (dropping late or excessively future packets), and stores the buffer in the
+ * appropriate ring buffer index slot.
+ *
+ * @param jb The jitter buffer structure pointer.
+ * @param buffer A pointer to the raw RTP packet memory.
+ * @param length The total size of the RTP packet in bytes.
+ * @return true if successfully queued, or false if invalid, late, duplicate, or out of window.
+ */
 bool jitter_buffer_push(
     struct jitter_buffer *restrict const jb,
     void *restrict const buffer,
     size_t const length);
 
-// Pops the next expected RTP packet in sequence.
-// If the packet is missing, returns false (and we should generate silence).
-// The caller is responsible for freeing the buffer back to the pool.
+/**
+ * @brief Pops the next expected RTP packet in sequence from the jitter buffer.
+ *
+ * Retrieves the packet matching next_pop_seq. If the packet is not available,
+ * it returns false, indicating a packet loss/gap (where the caller should generate silence).
+ * Forces advancing the sequence number on return.
+ *
+ * @param jb The jitter buffer structure pointer.
+ * @param out_buffer Output pointer to store the retrieved packet buffer pointer.
+ * @param out_length Output pointer to store the length of the retrieved packet.
+ * @return true if the expected packet was found and returned, or false if missing/not yet buffered.
+ */
 bool jitter_buffer_pop(
     struct jitter_buffer *restrict const jb,
     void **restrict out_buffer,
     size_t *restrict out_length);
+

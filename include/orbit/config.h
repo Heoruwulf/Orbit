@@ -38,4 +38,14 @@ struct app_config {
 
 extern struct app_config g_config;
 
+/**
+ * @brief Loads application configuration from environment variables.
+ *
+ * Reads variables such as SIP_LISTEN_ADDR, SIP_LISTEN_PORT, RTP_MIN_PORT,
+ * RTP_MAX_PORT, WS_LISTEN_PORT, and MAX_CALLS. Validates the configuration bounds
+ * and updates the global configuration structure g_config.
+ *
+ * @return 0 on success, or -1 if any validation fails.
+ */
 int config_load(void);
+

@@ -29,6 +29,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
  * LOGDBG is only active when DEBUG is defined.
  */
 
+/**
+ * @brief Resolves a signal number to its corresponding string name.
+ *
+ * @param signum The signal integer value (e.g., SIGINT, SIGTERM).
+ * @return A static string pointer representing the signal name, or "UNKNOWN".
+ */
 static inline char const *log_get_signal_name(int signum) {
     switch (signum) {
     case SIGINT:

@@ -38,6 +38,16 @@ struct string_view {
 
 #define SV_INIT_LEN(str, len) {.data = (str), .length = (len)}
 
+/**
+ * @brief Checks if a string view equals a null-terminated string.
+ *
+ * Performs a zero-copy comparison between the string view context and
+ * the provided C-style string.
+ *
+ * @param a The string view.
+ * @param b The null-terminated C string to compare.
+ * @return true if the contents and length match exactly, or false otherwise.
+ */
 static inline bool sv_equals(struct string_view const a, char const *restrict const b) {
     if (a.data == nullptr || b == nullptr) {
         return false;
@@ -49,6 +59,13 @@ static inline bool sv_equals(struct string_view const a, char const *restrict co
     return __builtin_memcmp(a.data, b, len) == 0;
 }
 
+/**
+ * @brief Finds the first occurrence of a needle substring in a string view.
+ *
+ * @param sv The source string view to search.
+ * @param needle The null-terminated C string substring to find.
+ * @return A pointer within the string view where the needle starts, or nullptr if not found.
+ */
 static inline char const *sv_find(struct string_view const sv, char const *restrict const needle) {
     if (sv.data == nullptr || needle == nullptr) {
         return nullptr;
@@ -68,3 +85,4 @@ static inline char const *sv_find(struct string_view const sv, char const *restr
     }
     return nullptr;
 }
+

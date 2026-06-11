@@ -41,7 +41,7 @@ bool ws_parse_handshake_url(
     if (!space)
         return false;
 
-    struct string_view query = {.data = q + 1, .length = (size_t)(space - q - 1)};
+    struct string_view query = SV_INIT_LEN(q + 1, (size_t)(space - q - 1));
 
     // Parse Internal ID (mapped to 'id=')
     char const *id_ptr = sv_find(query, "id=");
@@ -53,7 +53,7 @@ bool ws_parse_handshake_url(
     if (!id_end)
         id_end = query.data + query.length;
 
-    *out_internal_id = (struct string_view){.data = id_ptr, .length = (size_t)(id_end - id_ptr)};
+    *out_internal_id = SV_LEN(id_ptr, (size_t)(id_end - id_ptr));
 
     return true;
 }

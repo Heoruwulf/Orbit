@@ -129,7 +129,7 @@ static void test_wslay_integration(void) {
         0x58 // Masked Payload
     }; // "Hello"
 
-    struct string_view sv = {.data = (char *)mock_ws_frame, .length = sizeof(mock_ws_frame)};
+    struct string_view sv = SV_INIT_LEN((char *)mock_ws_frame, sizeof(mock_ws_frame));
 
     struct ws_connection conn = {};
     assert(ws_connection_init(&conn, -1, &callbacks, &sv) == true);

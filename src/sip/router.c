@@ -54,10 +54,10 @@ sip_verb_t sip_parse_verb(struct string_view const method) {
     return SIP_VERB_UNKNOWN;
 }
 
-static inline void
-extract_header_value(struct string_view const line,
-                     size_t const prefix_len,
-                     struct string_view *restrict const out_val) {
+static inline void extract_header_value(
+    struct string_view const line,
+    size_t const             prefix_len,
+    struct string_view *restrict const out_val) {
     auto val = line.data + prefix_len;
     auto len = line.length - prefix_len;
     while (len > 0 && (*val == ' ' || *val == '\t')) {
@@ -82,12 +82,15 @@ parse_header_line(struct string_view const line, struct sip_message *restrict co
         extract_header_value(line, 4, &out_msg->via);
     } else if (line.length >= 2 && line.data[0] == 'X' && line.data[1] == '-') {
         if (out_msg->custom_header_count < SIP_MAX_CUSTOM_HEADERS) {
-            char const * const colon = memchr(line.data, ':', line.length);
+            char const *const colon = memchr(line.data, ':', line.length);
             if (colon != nullptr) {
                 size_t const name_len = (size_t)(colon - line.data);
                 out_msg->custom_headers[out_msg->custom_header_count].name.data   = line.data;
                 out_msg->custom_headers[out_msg->custom_header_count].name.length = name_len;
-                extract_header_value(line, name_len + 1, &out_msg->custom_headers[out_msg->custom_header_count].value);
+                extract_header_value(
+                    line,
+                    name_len + 1,
+                    &out_msg->custom_headers[out_msg->custom_header_count].value);
                 out_msg->custom_header_count++;
             }
         }
@@ -110,7 +113,7 @@ bool sip_parse_message(struct string_view const raw, struct sip_message *restric
         return false;
     }
 
-    struct string_view const first_line = {.data = ptr, .length = (size_t)(line_end - ptr)};
+    struct string_view const first_line = SV_INIT_LEN(ptr, (size_t)(line_end - ptr));
     out_msg->verb                       = sip_parse_verb(first_line);
 
     ptr = line_end + 2;
@@ -129,7 +132,7 @@ bool sip_parse_message(struct string_view const raw, struct sip_message *restric
             return false;
         }
 
-        struct string_view const line = {.data = ptr, .length = (size_t)(line_end - ptr)};
+        struct string_view const line = SV_INIT_LEN(ptr, (size_t)(line_end - ptr));
         parse_header_line(line, out_msg);
 
         ptr = line_end + 2;
@@ -402,7 +405,7 @@ struct call_session *sip_router_process(struct sip_message const *restrict const
                 msg->call_id.data);
             event_publish_call_answered(
                 msg,
-                (struct string_view){session->internal_id_buf, session->internal_id_len});
+                SV_LEN(session->internal_id_buf, session->internal_id_len));
         }
         if (msg->body.length > 0) {
             sdp_parse(msg->body, &session->remote_sdp);
@@ -517,7 +520,7 @@ size_t sip_generate_response(
 
 void sip_router_process_recv(struct io_event_ctx *restrict const ctx, size_t const len) {
     struct sip_message msg = {};
-    struct string_view raw = {.data = (char *)ctx->buffer, .length = len};
+    struct string_view raw = SV_INIT_LEN((char *)ctx->buffer, len);
 
     if (likely(sip_parse_message(raw, &msg))) {
         struct call_session *session = nullptr;

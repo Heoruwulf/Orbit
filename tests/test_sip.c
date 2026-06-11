@@ -242,7 +242,7 @@ static void test_sip_response(void) {
         &msg_opt,
         200,
         "OK",
-        (struct string_view){.data = caps_buf, .length = caps_len},
+        SV_LEN(caps_buf, caps_len),
         buffer,
         sizeof(buffer));
     assert(len_opt > 0);
@@ -289,8 +289,8 @@ static void test_sip_message_whitespace_parsing(void) {
                            "X-Custom-Header: \t Value123 \r\n"
                            "\r\n";
 
-    struct sip_message msg = {};
-    bool const success = sip_parse_message(SV(raw_msg), &msg);
+    struct sip_message msg     = {};
+    bool const         success = sip_parse_message(SV(raw_msg), &msg);
     assert(success);
     assert(msg.verb == SIP_VERB_INVITE);
     assert(sv_equals(msg.call_id, "a84b4c76e66710"));

@@ -105,7 +105,7 @@ static void on_msg_recv_callback(
     (void)ctx;
     struct ws_bridge_session *session = (struct ws_bridge_session *)user_data;
     if (arg->opcode == WSLAY_TEXT_FRAME) {
-        struct string_view msg   = {(char *)arg->msg, arg->msg_length};
+        struct string_view msg   = SV_INIT_LEN((char *)arg->msg, arg->msg_length);
         uint8_t            digit = 0;
         if (ws_parse_dtmf_json(msg, &digit)) {
             rtp_engine_send_dtmf(
@@ -269,7 +269,7 @@ void ws_bridge_process_recv(struct io_event_ctx *restrict const ctx, int const r
     }
 
     if (!session->handshaked) {
-        struct string_view const raw         = {(char *)session->buffer, (size_t)res};
+        struct string_view const raw         = SV_INIT_LEN((char *)session->buffer, (size_t)res);
         struct string_view       internal_id = {};
         if (ws_parse_handshake_url(raw, &internal_id)) {
             auto const sip = sip_router_find_call_by_internal_id(internal_id);
@@ -312,7 +312,7 @@ void ws_bridge_process_recv(struct io_event_ctx *restrict const ctx, int const r
             }
         }
     } else {
-        session->unread_sv = (struct string_view){(char *)session->buffer, (size_t)res};
+        session->unread_sv = SV_LEN((char *)session->buffer, (size_t)res);
         if (session->sip_call)
             call_lock(session->sip_call);
         wslay_event_recv(session->conn.ctx);

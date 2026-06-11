@@ -21,9 +21,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <wslay/wslay.h>
 #include "orbit/sip_router.h"
 
+/**
+ * @brief Represents a WebSocket connection wrapping a wslay context.
+ */
 struct ws_connection {
-    wslay_event_context_ptr ctx;
-    int                     fd;
+    wslay_event_context_ptr ctx; /**< The wslay event context pointer. */
+    int                     fd;  /**< Client TCP socket file descriptor. */
 };
 
 /**

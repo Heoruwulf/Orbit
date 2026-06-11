@@ -19,21 +19,27 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <stdint.h>
 
+/**
+ * @brief Global application configuration settings.
+ *
+ * Holds the parsed and validated network settings, port ranges, and system limits
+ * read from environment variables during startup.
+ */
 struct app_config {
-    char const *sip_listen_addr;
-    char const *sip_external_addr;
-    char const *rtp_listen_addr;
-    char const *rtp_external_addr;
-    char const *ws_listen_addr;
-    char const *ws_external_addr;
-    char const *event_listen_addr;
-    uint16_t    sip_listen_port;
-    uint16_t    rtp_min_port;
-    uint16_t    rtp_max_port;
-    uint16_t    ws_listen_port;
-    uint16_t    ws_external_port;
-    uint16_t    event_listen_port;
-    uint32_t    max_calls;
+    char const *sip_listen_addr;     /**< IP address to bind the SIP listener. */
+    char const *sip_external_addr;   /**< Public IP address advertised in SIP Via/Contact. */
+    char const *rtp_listen_addr;     /**< IP address to bind RTP sockets. */
+    char const *rtp_external_addr;   /**< Public IP address advertised in SDP answers. */
+    char const *ws_listen_addr;      /**< IP address to bind the WebSocket listener. */
+    char const *ws_external_addr;    /**< Public IP address used for WebSocket media URLs. */
+    char const *event_listen_addr;   /**< Target UDP IP address for event publishing. */
+    uint16_t    sip_listen_port;     /**< Local port for the SIP listener (e.g. 5060). */
+    uint16_t    rtp_min_port;        /**< Minimum port number of the RTP dynamic port range. */
+    uint16_t    rtp_max_port;        /**< Maximum port number of the RTP dynamic port range. */
+    uint16_t    ws_listen_port;      /**< Local port for the WebSocket TCP listener (e.g. 8080). */
+    uint16_t    ws_external_port;    /**< External port advertised for WebSocket connections. */
+    uint16_t    event_listen_port;   /**< Target UDP port for event publishing. */
+    uint32_t    max_calls;           /**< Maximum concurrent call sessions allowed. */
 };
 
 extern struct app_config g_config;

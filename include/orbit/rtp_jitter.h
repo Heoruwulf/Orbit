@@ -23,18 +23,27 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 constexpr size_t JITTER_BUFFER_SIZE = 64;
 
+/**
+ * @brief Represents a single packet slot within the jitter buffer.
+ */
 struct jitter_node {
-    void *restrict buffer;
-    size_t   length;
-    uint16_t seq_num;
-    bool     is_valid;
+    void *restrict buffer; /**< Pointer to the buffered raw RTP packet memory. */
+    size_t   length;       /**< Size of the raw RTP packet in bytes. */
+    uint16_t seq_num;      /**< RTP sequence number extracted from the packet header. */
+    bool     is_valid;     /**< Flag indicating if the slot contains an unpopped packet. */
 };
 
+/**
+ * @brief Cacheline-aligned jitter buffer for sorting out-of-order RTP packets.
+ *
+ * Implements a ring buffer of dynamic nodes with force advancement tracking to handle
+ * gaps, duplicates, and late packets gracefully.
+ */
 struct jitter_buffer {
-    alignas(64) struct jitter_node slots[JITTER_BUFFER_SIZE];
-    uint16_t next_pop_seq;
-    bool     has_started;
-    bool     has_popped;
+    alignas(64) struct jitter_node slots[JITTER_BUFFER_SIZE]; /**< Fixed-size array of buffering packet slots. */
+    uint16_t next_pop_seq;                                    /**< The sequence number of the next expected packet to pop. */
+    bool     has_started;                                     /**< True if the buffer has received its initial packet. */
+    bool     has_popped;                                      /**< True if the caller has started popping packets. */
 };
 
 /**

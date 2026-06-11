@@ -21,9 +21,12 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 typedef struct mem_pool mem_pool_t;
 
+/**
+ * @brief Memory pool configuration parameters.
+ */
 struct pool_config {
-    size_t object_size;
-    size_t count;
+    size_t object_size; /**< Size of a single pre-allocated object node in bytes. */
+    size_t count;       /**< Maximum capacity / number of object nodes in the pool. */
 };
 
 /**

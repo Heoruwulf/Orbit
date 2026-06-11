@@ -20,10 +20,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdbool.h>
 #include <stddef.h>
 
+/**
+ * @brief Context structure containing parameters for a worker thread.
+ */
 struct worker_ctx {
-    int worker_id;
-    int core_id;
-    int event_fd; // IPC signal from supervisor
+    int worker_id; /**< The unique logical index assigned to the worker. */
+    int core_id;   /**< The target CPU core index to pin this worker thread's affinity. */
+    int event_fd;  /**< eventfd descriptor used by supervisor to push IPC signals (e.g. shutdown). */
 };
 
 /**

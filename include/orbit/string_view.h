@@ -21,9 +21,15 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stddef.h>
 #include <stdint.h>
 
+/**
+ * @brief Represents a zero-copy string slice.
+ *
+ * References an external, non-null-terminated string buffer with an explicit length,
+ * avoiding allocations during string parsing.
+ */
 struct string_view {
-    char const *restrict data;
-    size_t length;
+    char const *restrict data; /**< Pointer to the start of the character sequence. */
+    size_t length;             /**< Length of the string slice in bytes. */
 };
 
 // Use for compound literal inline instantiation

@@ -27,75 +27,92 @@ struct io_event_ctx;
 
 #include "orbit/string_view.h"
 
-// Explicit enumeration for required SIP methods
+/**
+ * @brief Enumeration of supported SIP request methods and response type.
+ */
 typedef enum sip_verb {
-    SIP_VERB_UNKNOWN = 0,
-    SIP_VERB_INVITE,
-    SIP_VERB_ACK,
-    SIP_VERB_CANCEL,
-    SIP_VERB_BYE,
-    SIP_VERB_OPTIONS,
-    SIP_VERB_RESPONSE // For 2xx, 4xx, etc.
+    SIP_VERB_UNKNOWN = 0,  /**< Unknown or unsupported SIP method. */
+    SIP_VERB_INVITE,       /**< INVITE request used to initiate a call. */
+    SIP_VERB_ACK,          /**< ACK request acknowledging a final response. */
+    SIP_VERB_CANCEL,       /**< CANCEL request terminating a pending call. */
+    SIP_VERB_BYE,          /**< BYE request terminating an active session. */
+    SIP_VERB_OPTIONS,      /**< OPTIONS query for capability exchange or pings. */
+    SIP_VERB_RESPONSE      /**< Message is a SIP response status. */
 } sip_verb_t;
 
+/**
+ * @brief SDP parameters for a single media codec.
+ */
 struct sdp_codec_info {
-    uint32_t sample_rate;
-    uint8_t  payload_type;
-    uint8_t  channels;
+    uint32_t sample_rate;  /**< Sample rate in Hz (e.g., 8000, 48000). */
+    uint8_t  payload_type; /**< RTP payload type index, or 255 if not negotiated. */
+    uint8_t  channels;     /**< Number of audio channels (e.g. 1 for mono, 2 for stereo). */
 };
 
-// Extracted SDP properties
+/**
+ * @brief Extracted SDP media block containing connection and codec properties.
+ */
 struct sdp_media_info {
-    struct string_view    ip_addr;
-    uint16_t              port;
-    uint32_t              ptime;
-    struct sdp_codec_info opus;
-    struct sdp_codec_info pcmu;
-    struct sdp_codec_info pcma;
-    struct sdp_codec_info l16;
-    struct sdp_codec_info dtmf;
+    struct string_view    ip_addr; /**< Connection IP address from the c= line. */
+    uint16_t              port;    /**< Media transport port from the m= line. */
+    uint32_t              ptime;   /**< Packetization time interval in ms. */
+    struct sdp_codec_info opus;    /**< Negotiated properties for the Opus codec. */
+    struct sdp_codec_info pcmu;    /**< Negotiated properties for the PCMU/G.711u codec. */
+    struct sdp_codec_info pcma;    /**< Negotiated properties for the PCMA/G.711a codec. */
+    struct sdp_codec_info l16;     /**< Negotiated properties for the L16 linear PCM codec. */
+    struct sdp_codec_info dtmf;    /**< Negotiated properties for telephone-event DTMF packets. */
 };
 
-// A parsed SIP header view
+/**
+ * @brief Represents a single parsed SIP header key-value slice.
+ */
 struct sip_header_view {
-    struct string_view name;
-    struct string_view value;
+    struct string_view name;  /**< Header key name string view. */
+    struct string_view value; /**< Header value string view. */
 };
 
 #define SIP_MAX_CUSTOM_HEADERS 16
 
-// Represents a parsed SIP message (request or response)
+/**
+ * @brief Represents a parsed incoming SIP request or response message.
+ */
 struct sip_message {
-    sip_verb_t             verb;
-    struct string_view     call_id;
-    struct string_view     from_tag;
-    struct string_view     to_tag;
-    struct string_view     cseq;
-    struct string_view     via;
-    struct string_view     body;
-    struct sip_header_view custom_headers[SIP_MAX_CUSTOM_HEADERS];
-    size_t                 custom_header_count;
-    uint16_t               response_code; // If verb == SIP_VERB_RESPONSE
+    sip_verb_t             verb;                                    /**< The parsed SIP method/verb. */
+    struct string_view     call_id;                                 /**< Unique Call-ID header slice. */
+    struct string_view     from_tag;                                /**< Initiating From header tag slice. */
+    struct string_view     to_tag;                                  /**< Recipient To header tag slice. */
+    struct string_view     cseq;                                    /**< Command sequence index string view. */
+    struct string_view     via;                                     /**< Routing path Via header slice. */
+    struct string_view     body;                                    /**< Pointer and length of the message body (SDP payload). */
+    struct sip_header_view custom_headers[SIP_MAX_CUSTOM_HEADERS];  /**< Array of parsed custom X- headers. */
+    size_t                 custom_header_count;                     /**< Number of custom headers successfully parsed. */
+    uint16_t               response_code;                           /**< SIP response code, populated if verb == SIP_VERB_RESPONSE. */
 };
 
+/**
+ * @brief Represents an active media bridge call session.
+ *
+ * Stores RTP tracking info, negotiated SDP capabilities, jitter buffers, and WebSocket linkages.
+ * Cacheline-aligned (alignas(64)) to prevent false sharing in multi-core processing loops.
+ */
 struct call_session {
-    alignas(64) bool is_active;
-    bool                  lock;
-    int                   refcount;
-    bool                  has_learned_remote_addr;
-    int                   rtp_fd;
-    uint16_t              tx_seq_num;
-    uint32_t              tx_timestamp;
-    uint32_t              tx_ssrc;
-    void                 *ws_session;
-    struct sockaddr_in    learned_remote_addr;
-    struct sdp_media_info remote_sdp;
-    struct sdp_media_info local_sdp;
-    struct jitter_buffer  jitter;
-    size_t                call_id_len;
-    size_t                internal_id_len;
-    char                  internal_id_buf[37];
-    char                  call_id_buf[128];
+    alignas(64) bool is_active;               /**< Session state flag. */
+    bool                  lock;                    /**< Atomic spinlock flag protecting this session. */
+    int                   refcount;                /**< Atomic reference count for lock-free session reuse. */
+    bool                  has_learned_remote_addr; /**< True if the remote RTP sender endpoint has been resolved. */
+    int                   rtp_fd;                  /**< UDP socket descriptor for RTP traffic. */
+    uint16_t              tx_seq_num;              /**< Monotonically increasing RTP transmitter sequence number. */
+    uint32_t              tx_timestamp;            /**< RTP transmitter timestamp tracker. */
+    uint32_t              tx_ssrc;                 /**< Synchronization source identifier for outbound RTP. */
+    void                 *ws_session;              /**< Associated WebSocket session bridge pointer. */
+    struct sockaddr_in    learned_remote_addr;     /**< Resolved IP address/port of the remote RTP peer. */
+    struct sdp_media_info remote_sdp;              /**< SDP connection and codec capabilities parsed from remote peer. */
+    struct sdp_media_info local_sdp;               /**< SDP capabilities offered locally. */
+    struct jitter_buffer  jitter;                  /**< Jitter buffer tracking inbound RTP packets. */
+    size_t                call_id_len;             /**< Length of the cached Call-ID string. */
+    size_t                internal_id_len;         /**< Length of the internal UUID string. */
+    char                  internal_id_buf[37];     /**< Cached buffer containing the internal UUID string. */
+    char                  call_id_buf[128];        /**< Cached buffer containing the Call-ID string. */
 };
 
 /**

@@ -24,26 +24,35 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 struct io_uring;
 struct call_session;
 
+/**
+ * @brief Enumerates the type of completed I/O events managed by the server loop.
+ */
 typedef enum event_type {
-    EVENT_TYPE_SIGNAL    = 1,
-    EVENT_TYPE_RTP_RECV  = 2,
-    EVENT_TYPE_RTP_SEND  = 3,
-    EVENT_TYPE_WS_ACCEPT = 4,
-    EVENT_TYPE_WS_RECV   = 5,
-    EVENT_TYPE_WS_SEND   = 6,
-    EVENT_TYPE_SIP_RECV  = 7,
-    EVENT_TYPE_SIP_SEND  = 8
+    EVENT_TYPE_SIGNAL    = 1, /**< Intercepted signal (SIGINT/SIGTERM) notification event. */
+    EVENT_TYPE_RTP_RECV  = 2, /**< Completion of an RTP packet read operation. */
+    EVENT_TYPE_RTP_SEND  = 3, /**< Completion of an RTP packet write operation. */
+    EVENT_TYPE_WS_ACCEPT = 4, /**< Completion of a WebSocket server socket accept operation. */
+    EVENT_TYPE_WS_RECV   = 5, /**< Completion of a WebSocket frame read operation. */
+    EVENT_TYPE_WS_SEND   = 6, /**< Completion of a WebSocket frame write operation. */
+    EVENT_TYPE_SIP_RECV  = 7, /**< Completion of a SIP message read operation. */
+    EVENT_TYPE_SIP_SEND  = 8  /**< Completion of a SIP message write operation. */
 } event_type_t;
 
+/**
+ * @brief User data context associated with each io_uring asynchronous I/O request.
+ *
+ * Keeps track of target descriptors, associated call sessions, scatter-gather I/O vectors,
+ * and endpoint addresses for processing event completions.
+ */
 struct io_event_ctx {
-    event_type_t type;
-    int          fd;
-    void *restrict buffer;
-    size_t               length;
-    struct call_session *session;
-    struct msghdr        msg;
-    struct iovec         iov;
-    struct sockaddr_in   remote_addr;
+    event_type_t type;            /**< Type of the submitted asynchronous I/O operation. */
+    int          fd;              /**< Socket or signal file descriptor associated with the event. */
+    void *restrict buffer;        /**< Pointer to the primary data payload buffer. */
+    size_t               length;  /**< Size of the data payload buffer or written data size. */
+    struct call_session *session; /**< Associated call session context (or WebSocket session). */
+    struct msghdr        msg;     /**< Message header for scatter/gather socket operations. */
+    struct iovec         iov;     /**< Single-element scatter/gather I/O vector referencing the buffer. */
+    struct sockaddr_in   remote_addr; /**< Source or destination IP socket address. */
 };
 
 /**

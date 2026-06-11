@@ -22,9 +22,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "orbit/server.h"
 #include "orbit/sip_router.h"
 
-// Helper to create a string_view from a literal string
-#define SV(str) ((struct string_view){.data = (str), .length = sizeof(str) - 1})
-
 extern bool __real_server_is_draining(void);
 static bool g_mock_draining = false;
 

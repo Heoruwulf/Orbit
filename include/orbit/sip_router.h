@@ -25,37 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 struct io_event_ctx;
 
-// A zero-allocation view into the network buffer
-struct string_view {
-    char const *restrict data;
-    size_t length;
-};
-
-static inline bool sv_equals(struct string_view const a, char const *restrict const b) {
-    if (a.data == nullptr || b == nullptr)
-        return false;
-    size_t const len = __builtin_strlen(b);
-    if (a.length != len)
-        return false;
-    return __builtin_memcmp(a.data, b, len) == 0;
-}
-
-static inline char const *sv_find(struct string_view const sv, char const *restrict const needle) {
-    if (sv.data == nullptr || needle == nullptr)
-        return nullptr;
-    size_t const needle_len = __builtin_strlen(needle);
-    if (needle_len > sv.length)
-        return nullptr;
-    if (needle_len == 0)
-        return sv.data;
-
-    for (size_t i = 0; i <= sv.length - needle_len; ++i) {
-        if (__builtin_memcmp(sv.data + i, needle, needle_len) == 0) {
-            return sv.data + i;
-        }
-    }
-    return nullptr;
-}
+#include "orbit/string_view.h"
 
 // Explicit enumeration for required SIP methods
 typedef enum sip_verb {

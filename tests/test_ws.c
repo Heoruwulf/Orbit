@@ -20,8 +20,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <string.h>
 #include "orbit/ws_handler.h"
 
-#define SV(str) ((struct string_view){.data = (str), .length = sizeof(str) - 1})
-
 static void test_ws_handshake(void) {
     char const         req[]  = "GET /media?id=550e8400-e29b-41d4-a716-446655440000 HTTP/1.1\r\n";
     struct string_view req_sv = SV(req);

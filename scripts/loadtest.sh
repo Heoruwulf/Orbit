@@ -9,7 +9,7 @@ node index.js \
     --client-ip 127.0.0.1 \
     --client-rtp-port-base 25000 \
     --client-sip-port 5061 \
-    --event-port 9000 \
     --calls 4000 \
     --call-rate 100 \
-    --record one
+    --record one \
+    --redis-uri 'redis://127.0.0.1:6379/0'

@@ -91,4 +91,3 @@ static inline char const *sv_find(struct string_view const sv, char const *restr
     }
     return nullptr;
 }
-

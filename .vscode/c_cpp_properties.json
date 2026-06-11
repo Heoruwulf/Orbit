@@ -10,6 +10,9 @@
             ],
             "defines": [
                 "_GNU_SOURCE",
+                "__GLIBC__",
+                "ORBIT_WITH_KAFKA",
+                "ORBIT_WITH_REDIS",
                 "DEBUG_LOG"
             ],
             "compilerPath": "/usr/bin/clang",

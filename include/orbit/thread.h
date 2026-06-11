@@ -26,7 +26,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 struct worker_ctx {
     int worker_id; /**< The unique logical index assigned to the worker. */
     int core_id;   /**< The target CPU core index to pin this worker thread's affinity. */
-    int event_fd;  /**< eventfd descriptor used by supervisor to push IPC signals (e.g. shutdown). */
+    int event_fd; /**< eventfd descriptor used by supervisor to push IPC signals (e.g. shutdown). */
 };
 
 /**
@@ -67,4 +67,3 @@ int worker_get_id(void);
  * @return Total number of spawned worker threads.
  */
 int worker_get_count(void);
-

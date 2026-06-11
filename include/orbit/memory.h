@@ -48,7 +48,7 @@ mem_pool_t *pool_create(struct pool_config config);
  * @param pool A pointer to the memory pool.
  * @return A pointer to the allocated object, or nullptr if the pool is exhausted.
  */
-void       *pool_alloc(mem_pool_t *pool);
+void *pool_alloc(mem_pool_t *pool);
 
 /**
  * @brief Releases an object back to the memory pool.
@@ -58,7 +58,7 @@ void       *pool_alloc(mem_pool_t *pool);
  * @param pool A pointer to the memory pool.
  * @param ptr A pointer to the object being returned to the pool.
  */
-void        pool_free(mem_pool_t *pool, void *ptr);
+void pool_free(mem_pool_t *pool, void *ptr);
 
 /**
  * @brief Destroys the memory pool and releases all allocated memory.
@@ -67,5 +67,4 @@ void        pool_free(mem_pool_t *pool, void *ptr);
  *
  * @param pool A pointer to the memory pool to destroy.
  */
-void        pool_destroy(mem_pool_t *pool);
-
+void pool_destroy(mem_pool_t *pool);

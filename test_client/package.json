@@ -11,6 +11,8 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "kafkajs": "^2.2.4",
+    "redis": "^6.0.0",
     "sip": "^0.0.6",
     "ws": "^8.21.0"
   }

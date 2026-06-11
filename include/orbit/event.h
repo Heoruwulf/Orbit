@@ -20,6 +20,31 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "orbit/config.h"
 #include "orbit/sip_router.h"
 
+typedef int (*event_init_fn)(void);
+typedef int (*event_publish_fn)(char const *restrict const payload, size_t const len);
+typedef void (*event_cleanup_fn)(void);
+
+struct event_provider {
+    char const      *name;
+    event_init_fn    init;
+    event_publish_fn publish;
+    event_cleanup_fn cleanup;
+};
+
+/**
+ * @brief Initializes the global event subsystem (queues and background thread).
+ * Must be called by the supervisor thread before worker threads are spawned.
+ *
+ * @return 0 on success, or -1 on failure.
+ */
+int event_global_init(void);
+
+/**
+ * @brief Cleans up the global event subsystem resources.
+ * Must be called by the supervisor thread after workers have stopped.
+ */
+void event_global_cleanup(void);
+
 /**
  * @brief Initializes the UDP event publisher socket and target address.
  *
@@ -29,11 +54,11 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 void event_init(void);
 
 /**
- * @brief Publishes a JSON-serialized call answered event over UDP.
+ * @brief Publishes a JSON-serialized call answered event.
  *
  * Serializes the SIP call details (Call-ID, From, To tags, custom headers)
  * and the generated WebSocket URL into a JSON payload using a zero-allocation
- * memory pool, then sends it to the configured event collector.
+ * memory pool, then pushes it to the thread-local event queue or sends it directly.
  *
  * @param msg The parsed incoming SIP message triggering the event.
  * @param internal_id The unique internal UUID string view assigned to the call.
@@ -41,4 +66,3 @@ void event_init(void);
 void event_publish_call_answered(
     struct sip_message const *restrict const msg,
     struct string_view const internal_id);
-

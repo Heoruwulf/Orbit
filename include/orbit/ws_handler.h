@@ -94,4 +94,3 @@ size_t ws_generate_metadata_json(
     struct call_session const *restrict const session,
     char *restrict const buffer,
     size_t const max_len);
-

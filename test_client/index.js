@@ -100,6 +100,16 @@ Options:
 
 // Ensure record directory exists if needed
 if (options.record !== 'none') {
+    const now = new Date();
+    const timestamp = now.getFullYear().toString() +
+        (now.getMonth() + 1).toString().padStart(2, '0') +
+        now.getDate().toString().padStart(2, '0') + '_' +
+        now.getHours().toString().padStart(2, '0') +
+        now.getMinutes().toString().padStart(2, '0') +
+        now.getSeconds().toString().padStart(2, '0');
+
+    options.recordDir = path.join(options.recordDir, timestamp);
+
     if (!fs.existsSync(options.recordDir)) {
         fs.mkdirSync(options.recordDir, { recursive: true });
     }
@@ -290,7 +300,7 @@ class Call {
             if (res.status === 200) {
                 this.lastToHeader = res.headers.to;
                 const serverSdp = res.content;
-                const match = serverSdp.match(/m=audio (\\d+)/);
+                const match = serverSdp.match(/m=audio (\d+)/);
                 this.serverRtpPort = match ? parseInt(match[1]) : 16000;
 
                 // ACK the 200 OK

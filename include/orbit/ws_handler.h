@@ -21,35 +21,77 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <wslay/wslay.h>
 #include "orbit/sip_router.h"
 
+/**
+ * @brief Represents a WebSocket connection wrapping a wslay context.
+ */
 struct ws_connection {
-    wslay_event_context_ptr ctx;
-    int                     fd;
+    wslay_event_context_ptr ctx; /**< The wslay event context pointer. */
+    int                     fd;  /**< Client TCP socket file descriptor. */
 };
 
-// Initializes a wslay connection context.
-// Returns true on success.
+/**
+ * @brief Initializes a wslay event connection context.
+ *
+ * Wraps a socket descriptor and registers wslay event callbacks for read/write
+ * operations on a WebSocket client session.
+ *
+ * @param conn The connection structure to initialize.
+ * @param fd The TCP socket file descriptor.
+ * @param callbacks The callback table containing I/O callbacks.
+ * @param user_data Arbitrary data passed to connection callback functions.
+ * @return true on success, or false on wslay initialization failure.
+ */
 bool ws_connection_init(
     struct ws_connection               *conn,
     int                                 fd,
     struct wslay_event_callbacks const *callbacks,
     void                               *user_data);
 
-// Frees the wslay connection context.
+/**
+ * @brief Frees the wslay event connection context.
+ *
+ * @param conn The connection structure to free.
+ */
 void ws_connection_free(struct ws_connection *conn);
 
-// Parses the HTTP GET request to extract `uuid` and `callid`.
-// Returns true if valid and outputs them.
+/**
+ * @brief Parses the HTTP GET upgrade request line to extract the internal call UUID.
+ *
+ * Locates the query string id value parameter in a URI like "GET /media?id=<uuid> HTTP/1.1".
+ *
+ * @param req_line The raw HTTP request start line.
+ * @param out_internal_id Output string view populated with the extracted ID substring.
+ * @return true if successfully parsed, or false otherwise.
+ */
 bool ws_parse_handshake_url(
     struct string_view const req_line,
     struct string_view *restrict const out_internal_id);
 
-// Parses a WebSocket text frame containing JSON: {"type":"dtmf","digit":"1"}.
-// Returns true and writes the integer representation (0-15) to out_digit.
+/**
+ * @brief Parses a DTMF digit transaction request formatted in JSON.
+ *
+ * Expects a WebSocket text frame in the format: {"type":"dtmf","digit":"1"}.
+ * Converts characters (0-9, *, #, A-D) into their standard telephony indices (0-15).
+ *
+ * @param text The WebSocket text frame payload string.
+ * @param out_digit Output pointer to write the parsed DTMF digit index (0-15).
+ * @return true if successfully parsed, or false otherwise.
+ */
 bool ws_parse_dtmf_json(struct string_view const text, uint8_t *restrict const out_digit);
 
-// Generates the initial JSON metadata payload string.
-// Returns the length written to buffer.
+/**
+ * @brief Generates the initial JSON metadata payload describing the negotiated call properties.
+ *
+ * Serializes the session metadata parameters (sample rate, channels, negotiated codec, ptime,
+ * SIP Call-ID) into a JSON document using a zero-allocation heap buffer.
+ *
+ * @param session The call session structure.
+ * @param buffer Output buffer where the formatted metadata JSON will be written.
+ * @param max_len Maximum writable length of the output buffer.
+ * @return Length of the formatted JSON string, or 0 if writing failed or size exceeded max_len.
+ */
 size_t ws_generate_metadata_json(
     struct call_session const *restrict const session,
     char *restrict const buffer,
     size_t const max_len);
+

@@ -20,23 +20,51 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <stdbool.h>
 #include <stddef.h>
 
+/**
+ * @brief Context structure containing parameters for a worker thread.
+ */
 struct worker_ctx {
-    int worker_id;
-    int core_id;
-    int event_fd; // IPC signal from supervisor
+    int worker_id; /**< The unique logical index assigned to the worker. */
+    int core_id;   /**< The target CPU core index to pin this worker thread's affinity. */
+    int event_fd;  /**< eventfd descriptor used by supervisor to push IPC signals (e.g. shutdown). */
 };
 
-// Spawn all worker threads and pin them to cores
+/**
+ * @brief Spawns the worker threads and pins them to CPU cores.
+ *
+ * Allocates thread arrays, creates eventfd communication descriptors for each worker,
+ * starts the worker loop (worker_thread_main), and applies CPU affinity to bind
+ * each worker thread to its specific core.
+ *
+ * @return 0 on success, or -1 on initialization or thread creation failure.
+ */
 int worker_pool_init(void);
 
-// Wait for all workers to shut down
+/**
+ * @brief Waits for all worker threads to stop and cleans up their resources.
+ *
+ * Joins each thread and closes the corresponding eventfd.
+ */
 void worker_pool_cleanup(void);
 
-// Signal all workers to gracefully shut down
+/**
+ * @brief Signals all worker threads in the pool to shut down.
+ *
+ * Writes to the eventfd of each worker to trigger thread loop exit.
+ */
 void worker_pool_stop_all(void);
 
-// Get the current worker's ID
+/**
+ * @brief Retrieves the worker ID of the calling thread.
+ *
+ * @return The integer ID of the current thread, or -1 if called by supervisor/non-worker thread.
+ */
 int worker_get_id(void);
 
-// Get the total number of workers
+/**
+ * @brief Retrieves the total count of workers in the pool.
+ *
+ * @return Total number of spawned worker threads.
+ */
 int worker_get_count(void);
+

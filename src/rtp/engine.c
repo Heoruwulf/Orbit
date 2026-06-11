@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <unistd.h>
 #include "orbit/config.h"
 #include "orbit/log.h"
+#include "orbit/macros.h"
 #include "orbit/memory.h"
 #include "orbit/rtp_engine.h"
 #include "orbit/server.h"
@@ -378,12 +379,12 @@ bool rtp_engine_send_payload(
 }
 
 void rtp_engine_process_packet(struct io_event_ctx *restrict const ctx, size_t const bytes_read) {
-    if (__builtin_expect(bytes_read > 12, 1)) {
+    if (likely(bytes_read > 12)) {
         // Minimum RTP header size is 12 bytes. Skip the header and send the payload.
         ws_bridge_send_binary(ctx->session, (uint8_t const *)ctx->buffer + 12, bytes_read - 12);
     }
 
-    if (__builtin_expect(ctx->session != nullptr && !ctx->session->has_learned_remote_addr, 0)) {
+    if (unlikely(ctx->session != nullptr && !ctx->session->has_learned_remote_addr)) {
         ctx->session->has_learned_remote_addr = true;
         ctx->session->learned_remote_addr     = ctx->remote_addr;
         char ip[INET_ADDRSTRLEN];

@@ -22,9 +22,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "orbit/server.h"
 #include "orbit/sip_router.h"
 
-// Helper to create a string_view from a literal string
-#define SV(str) ((struct string_view){.data = (str), .length = sizeof(str) - 1})
-
 extern bool __real_server_is_draining(void);
 static bool g_mock_draining = false;
 
@@ -245,7 +242,7 @@ static void test_sip_response(void) {
         &msg_opt,
         200,
         "OK",
-        (struct string_view){.data = caps_buf, .length = caps_len},
+        SV_LEN(caps_buf, caps_len),
         buffer,
         sizeof(buffer));
     assert(len_opt > 0);
@@ -282,9 +279,35 @@ static void test_sip_draining_refusal(void) {
     printf("SIP draining refusal test passed.\n");
 }
 
+static void test_sip_message_whitespace_parsing(void) {
+    char const raw_msg[] = "INVITE sip:bob@biloxi.com SIP/2.0\r\n"
+                           "Via:  SIP/2.0/UDP pc33.atlanta.com\r\n"
+                           "To: \tBob <sip:bob@biloxi.com>\r\n"
+                           "From:   Alice <sip:alice@atlanta.com>;tag=1928301774\r\n"
+                           "Call-ID:\ta84b4c76e66710\r\n"
+                           "CSeq:\t 314159 INVITE\r\n"
+                           "X-Custom-Header: \t Value123 \r\n"
+                           "\r\n";
+
+    struct sip_message msg     = {};
+    bool const         success = sip_parse_message(SV(raw_msg), &msg);
+    assert(success);
+    assert(msg.verb == SIP_VERB_INVITE);
+    assert(sv_equals(msg.call_id, "a84b4c76e66710"));
+    assert(sv_equals(msg.from_tag, "Alice <sip:alice@atlanta.com>;tag=1928301774"));
+    assert(sv_equals(msg.to_tag, "Bob <sip:bob@biloxi.com>"));
+    assert(sv_equals(msg.cseq, "314159 INVITE"));
+    assert(sv_equals(msg.via, "SIP/2.0/UDP pc33.atlanta.com"));
+    assert(msg.custom_header_count == 1);
+    assert(sv_equals(msg.custom_headers[0].name, "X-Custom-Header"));
+    assert(sv_equals(msg.custom_headers[0].value, "Value123 "));
+    printf("SIP message whitespace parsing tests passed.\n");
+}
+
 int main(void) {
     test_sip_verb_parser();
     test_sip_message_parser();
+    test_sip_message_whitespace_parsing();
     test_sdp_parser();
 
     g_config.max_calls = 1024;

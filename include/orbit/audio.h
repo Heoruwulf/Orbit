@@ -121,14 +121,14 @@ struct vad_gru_state {
  * @param arena Pointer to the audio arena.
  * @return Pointer to the initialized state, or nullptr on failure.
  */
-struct vad_gru_state *vad_gru_init(struct audio_arena *const arena);
+struct vad_gru_state *vad_gru_init(struct audio_arena *restrict const arena);
 
 /**
  * @brief Resets the hidden state of the VAD.
  *
  * @param state Pointer to the GRU state.
  */
-void vad_gru_reset(struct vad_gru_state *const state);
+void vad_gru_reset(struct vad_gru_state *restrict const state);
 
 /**
  * @brief Processes a frame of audio and returns the probability of voice activity.
@@ -140,12 +140,14 @@ void vad_gru_reset(struct vad_gru_state *const state);
  * @param channels The number of channels.
  * @return A probability between 0.0f and 1.0f indicating voice activity, or -1.0f on error.
  */
+// clang-format off
 float vad_gru_process_pcm(
-    struct vad_gru_state *const state,
-    int16_t const *const        pcm,
-    size_t const                samples,
-    int const                   sample_rate,
-    int const                   channels);
+    struct vad_gru_state *restrict const state,
+    int16_t const *restrict const        pcm,
+    size_t const                         samples,
+    int const                            sample_rate,
+    int const                            channels);
+// clang-format on
 
 /**
  * @brief Supported audio codecs for transcoding.
@@ -215,10 +217,12 @@ struct transcode_session {
  * @param vad_arena Pointer to the memory arena used to allocate the VAD state (if enabled).
  * @return 0 on success, -1 on failure.
  */
+// clang-format off
 int transcode_session_init(
-    struct transcode_session *const      session,
-    struct transcode_config const *const config,
-    struct audio_arena *const            vad_arena);
+    struct transcode_session *restrict const      session,
+    struct transcode_config const *restrict const config,
+    struct audio_arena *restrict const            vad_arena);
+// clang-format on
 
 /**
  * @brief Processes an incoming audio packet through the transcoding pipeline.
@@ -231,10 +235,12 @@ int transcode_session_init(
  * @param out_len Returns the length of the final transcoded payload in bytes.
  * @return 0 on success, -1 on failure.
  */
+// clang-format off
 int transcode_process(
-    struct transcode_session *const session,
-    uint8_t const *const            in_data,
-    size_t const                    in_len,
-    struct audio_arena *const       out_arena,
-    uint8_t **const                 out_data,
-    size_t *const                   out_len);
+    struct transcode_session *restrict const session,
+    uint8_t const *restrict const            in_data,
+    size_t const                             in_len,
+    struct audio_arena *restrict const       out_arena,
+    uint8_t **restrict const                 out_data,
+    size_t *restrict const                   out_len);
+// clang-format on

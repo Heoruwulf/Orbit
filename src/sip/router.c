@@ -373,7 +373,7 @@ static void destroy_call(struct call_session *const session) {
     call_release(session);
 }
 
-void call_release(struct call_session *call) {
+void call_release(struct call_session *restrict const call) {
     if (call == nullptr)
         return;
     if (__atomic_fetch_sub(&call->refcount, 1, __ATOMIC_ACQ_REL) == 1) {

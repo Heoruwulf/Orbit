@@ -70,7 +70,7 @@ recv_callback(wslay_event_context_ptr ctx, uint8_t *buf, size_t len, int flags, 
 
 static ssize_t send_callback(
     wslay_event_context_ptr ctx,
-    const uint8_t          *data,
+    uint8_t const          *data,
     size_t                  len,
     int                     flags,
     void                   *user_data) {
@@ -489,7 +489,10 @@ void ws_bridge_process_send(struct io_event_ctx *restrict const ctx, int const r
     }
 }
 
-void ws_bridge_send_binary(struct call_session *sip_call, uint8_t const *data, size_t len) {
+void ws_bridge_send_binary(
+    struct call_session *restrict const sip_call,
+    uint8_t const *restrict const data,
+    size_t const len) {
     if (sip_call == nullptr || sip_call->ws_session == nullptr || data == nullptr || len == 0)
         return;
 
@@ -503,7 +506,7 @@ void ws_bridge_send_binary(struct call_session *sip_call, uint8_t const *data, s
     }
 }
 
-void ws_bridge_close(struct call_session *sip_call) {
+void ws_bridge_close(struct call_session *restrict const sip_call) {
     if (sip_call == nullptr || sip_call->ws_session == nullptr)
         return;
 

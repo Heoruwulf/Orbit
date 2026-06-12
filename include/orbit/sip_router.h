@@ -168,7 +168,7 @@ static inline void call_unlock(struct call_session *call) {
  *
  * @param call The call session pointer to release.
  */
-void call_release(struct call_session *call);
+void call_release(struct call_session *restrict const call);
 
 /**
  * @brief Initializes the SIP router structure, socket, and memory pools.

@@ -119,7 +119,7 @@ static struct event_provider const *event_provider_find(char const *const name) 
 
 // Lock-Free SPSC Queue Operations
 static bool event_queue_push(
-    struct event_spsc_queue *const restrict q,
+    struct event_spsc_queue *restrict const q,
     char const *restrict const payload,
     size_t const len) {
 
@@ -648,7 +648,7 @@ struct event_provider const g_event_provider_redis = {
 static rd_kafka_t       *g_kafka_rk  = nullptr;
 static rd_kafka_topic_t *g_kafka_rkt = nullptr;
 
-static void kafka_dr_msg_cb(rd_kafka_t *rk, const rd_kafka_message_t *rkmessage, void *opaque) {
+static void kafka_dr_msg_cb(rd_kafka_t *rk, rd_kafka_message_t const *rkmessage, void *opaque) {
     (void)rk;
     (void)opaque;
     if (unlikely(rkmessage->err)) {

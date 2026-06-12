@@ -23,7 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "orbit/audio.h"
 #include "vad_gru_weights.h"
 
-struct vad_gru_state *vad_gru_init(struct audio_arena *const arena) {
+struct vad_gru_state *vad_gru_init(struct audio_arena *restrict const arena) {
     if (arena == nullptr) {
         return nullptr;
     }
@@ -45,7 +45,7 @@ struct vad_gru_state *vad_gru_init(struct audio_arena *const arena) {
     return state;
 }
 
-void vad_gru_reset(struct vad_gru_state *const state) {
+void vad_gru_reset(struct vad_gru_state *restrict const state) {
     if (state != nullptr) {
         __builtin_memset(state->hidden_state, 0, sizeof(state->hidden_state));
     }
@@ -101,8 +101,8 @@ static inline __m256 tanh_ps(__m256 const x) {
 }
 
 static float vad_gru_process_frame_avx2(
-    struct vad_gru_state *const state,
-    float const *const restrict features,
+    struct vad_gru_state *restrict const state,
+    float const *restrict const features,
     size_t const num_features) {
     if (state == nullptr || features == nullptr || num_features != VAD_FEATURE_DIM) {
         return 0.0f;
@@ -219,12 +219,14 @@ static float vad_gru_process_frame_avx2(
     return 1.0f / (1.0f + __builtin_expf(-out_val));
 }
 
+// clang-format off
 float vad_gru_process_pcm(
-    struct vad_gru_state *const state,
-    int16_t const *const        pcm,
-    size_t const                samples,
-    int const                   sample_rate,
-    int const                   channels) {
+    struct vad_gru_state *restrict const state,
+    int16_t const *restrict const        pcm,
+    size_t const                         samples,
+    int const                            sample_rate,
+    int const                            channels) {
+    // clang-format on
     if (state == nullptr || pcm == nullptr || samples < 1 || channels <= 0) {
         return -1.0f;
     }

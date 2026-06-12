@@ -182,7 +182,7 @@ bool ws_connection_init(
     return true;
 }
 
-void ws_connection_free(struct ws_connection *conn) {
+void ws_connection_free(struct ws_connection *restrict const conn) {
     if (conn != nullptr && conn->ctx != nullptr) {
         wslay_event_context_free(conn->ctx);
         conn->ctx = nullptr;

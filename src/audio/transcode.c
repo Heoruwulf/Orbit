@@ -105,10 +105,12 @@ static inline bool is_host_little_endian(void) {
     return *((uint8_t const *)&x) == 1;
 }
 
+// clang-format off
 int transcode_session_init(
-    struct transcode_session *const      session,
-    struct transcode_config const *const config,
-    struct audio_arena *const            vad_arena) {
+    struct transcode_session *restrict const      session,
+    struct transcode_config const *restrict const config,
+    struct audio_arena *restrict const            vad_arena) {
+    // clang-format on
 
     if (unlikely(session == nullptr || config == nullptr)) {
         return -1;
@@ -176,13 +178,15 @@ static void swap_endian_l16(int16_t *restrict const data, size_t const samples) 
     }
 }
 
+// clang-format off
 int transcode_process(
-    struct transcode_session *const session,
-    uint8_t const *const            in_data,
-    size_t const                    in_len,
-    struct audio_arena *const       out_arena,
-    uint8_t **const                 out_data_ptr,
-    size_t *const                   out_len_ptr) {
+    struct transcode_session *restrict const session,
+    uint8_t const *restrict const            in_data,
+    size_t const                             in_len,
+    struct audio_arena *restrict const       out_arena,
+    uint8_t **restrict const                 out_data_ptr,
+    size_t *restrict const                   out_len_ptr) {
+    // clang-format on
 
     if (unlikely(
             session == nullptr || in_data == nullptr || out_arena == nullptr ||

@@ -84,7 +84,7 @@ static ssize_t mock_recv_callback(
 
 static ssize_t mock_send_callback(
     wslay_event_context_ptr ctx,
-    const uint8_t          *data,
+    uint8_t const          *data,
     size_t                  len,
     int                     flags,
     void                   *user_data) {

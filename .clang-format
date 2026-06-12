@@ -101,6 +101,8 @@ PenaltyBreakTemplateDeclaration: 10
 PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerAlignment: Right
+QualifierAlignment: Custom
+QualifierOrder: ['type', 'restrict', 'const', 'volatile']
 ReflowComments:  true
 SortIncludes:    true
 SortUsingDeclarations: true

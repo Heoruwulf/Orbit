@@ -77,7 +77,10 @@ void ws_bridge_process_send(struct io_event_ctx *restrict const ctx, int const r
  * @param data Pointer to the binary payload data buffer.
  * @param len Length of the binary data in bytes.
  */
-void ws_bridge_send_binary(struct call_session *sip_call, uint8_t const *data, size_t len);
+void ws_bridge_send_binary(
+    struct call_session *restrict const sip_call,
+    uint8_t const *restrict const data,
+    size_t const len);
 
 /**
  * @brief Closes the WebSocket connection associated with the call session.
@@ -86,4 +89,4 @@ void ws_bridge_send_binary(struct call_session *sip_call, uint8_t const *data, s
  *
  * @param sip_call The associated SIP call session context.
  */
-void ws_bridge_close(struct call_session *sip_call);
+void ws_bridge_close(struct call_session *restrict const sip_call);

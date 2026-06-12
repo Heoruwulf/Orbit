@@ -52,7 +52,7 @@ bool ws_connection_init(
  *
  * @param conn The connection structure to free.
  */
-void ws_connection_free(struct ws_connection *conn);
+void ws_connection_free(struct ws_connection *restrict const conn);
 
 /**
  * @brief Parses the HTTP GET upgrade request line to extract the internal call UUID.

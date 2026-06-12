@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,6 +32,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "orbit/server.h"
 #include "orbit/sip_router.h"
 #include "orbit/thread.h"
+#include "orbit/time.h"
 #include "orbit/ws_bridge.h"
 
 static size_t                   g_next_port_offset = 0;
@@ -384,6 +386,9 @@ void rtp_engine_process_packet(struct io_event_ctx *restrict const ctx, size_t c
             uint8_t *transcoded            = nullptr;
             size_t   transcoded_len        = 0;
             ctx->session->rtp_scratch.curr = 0;
+
+            uint64_t const start_ns = orbit_hrtime();
+
             transcode_process(
                 &ctx->session->ts_to_ws,
                 (uint8_t const *)ctx->buffer + 12,
@@ -391,6 +396,26 @@ void rtp_engine_process_packet(struct io_event_ctx *restrict const ctx, size_t c
                 &ctx->session->rtp_scratch,
                 &transcoded,
                 &transcoded_len);
+
+            uint64_t const end_ns  = orbit_hrtime();
+            uint64_t const elapsed = end_ns - start_ns;
+
+            if (ctx->session->ts_to_ws.in_sample_rate > 0) {
+                size_t samples = bytes_read - 12;
+                if (ctx->session->ts_to_ws.in_codec == CODEC_L16) {
+                    samples /= (sizeof(int16_t) * ctx->session->ts_to_ws.in_channels);
+                }
+                uint64_t const ptime_ns =
+                    (uint64_t)samples * 1000000000ULL / ctx->session->ts_to_ws.in_sample_rate;
+                if (elapsed > ptime_ns && ptime_ns > 0) {
+                    LOGWRN(
+                        "RTP->WS Transcoding exceeded ptime: elapsed=%" PRIu64 "ns, ptime=%" PRIu64
+                        "ns",
+                        elapsed,
+                        ptime_ns);
+                }
+            }
+
             if (transcoded && transcoded_len > 0) {
                 ws_bridge_send_binary(ctx->session, transcoded, transcoded_len);
             }

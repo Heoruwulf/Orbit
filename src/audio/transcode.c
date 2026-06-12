@@ -16,7 +16,6 @@ You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 #include <stdalign.h>
-#include <string.h>
 #include "g711_tables.h"
 #include "orbit/audio.h"
 #include "orbit/macros.h"

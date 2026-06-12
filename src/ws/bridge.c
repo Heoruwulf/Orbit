@@ -17,6 +17,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <netinet/in.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,6 +30,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "orbit/rtp_engine.h"
 #include "orbit/server.h"
 #include "orbit/sip_router.h"
+#include "orbit/time.h"
 #include "orbit/ws_bridge.h"
 #include "orbit/ws_handler.h"
 
@@ -122,6 +124,9 @@ static void on_msg_recv_callback(
             size_t   transcoded_len = 0;
             if (session->sip_call->transcode_initialized) {
                 session->sip_call->ws_scratch.curr = 0;
+
+                uint64_t const start_ns = orbit_hrtime();
+
                 transcode_process(
                     &session->sip_call->ts_to_rtp,
                     arg->msg,
@@ -129,6 +134,25 @@ static void on_msg_recv_callback(
                     &session->sip_call->ws_scratch,
                     &transcoded,
                     &transcoded_len);
+
+                uint64_t const end_ns  = orbit_hrtime();
+                uint64_t const elapsed = end_ns - start_ns;
+
+                if (session->sip_call->ts_to_rtp.in_sample_rate > 0) {
+                    size_t samples = arg->msg_length;
+                    if (session->sip_call->ts_to_rtp.in_codec == CODEC_L16) {
+                        samples /= (sizeof(int16_t) * session->sip_call->ts_to_rtp.in_channels);
+                    }
+                    uint64_t const ptime_ns = (uint64_t)samples * 1000000000ULL /
+                                              session->sip_call->ts_to_rtp.in_sample_rate;
+                    if (elapsed > ptime_ns && ptime_ns > 0) {
+                        LOGWRN(
+                            "WS->RTP Transcoding exceeded ptime: elapsed=%" PRIu64
+                            "ns, ptime=%" PRIu64 "ns",
+                            elapsed,
+                            ptime_ns);
+                    }
+                }
             }
             if (transcoded && transcoded_len > 0) {
                 rtp_engine_send_payload(

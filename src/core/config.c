@@ -49,6 +49,20 @@ static int get_env_or_default_int(
     return atoi(val);
 }
 
+static bool get_env_or_default_bool(char const *const name, bool const default_val) {
+    auto const val = get_env_strict(name);
+    if (val == nullptr) {
+        return default_val;
+    }
+    if (__builtin_strcmp(val, "true") == 0) {
+        return true;
+    }
+    if (__builtin_strcmp(val, "false") == 0) {
+        return false;
+    }
+    return default_val;
+}
+
 static bool is_valid_port(int const port) { return (port > 1024 && port < 65536) != 0; }
 
 static void config_print(void) {
@@ -102,6 +116,16 @@ static void config_print(void) {
     LOGINF(
         "Config: EVENT_KAFKA_TOPIC = %s",
         g_config.event_kafka_topic ? g_config.event_kafka_topic : "(null)");
+    LOGINF(
+        "Config: WS_CODEC_PAYLOAD_TYPE = %s",
+        g_config.ws_codec_payload_type ? g_config.ws_codec_payload_type : "(null)");
+    LOGINF("Config: WS_CODEC_SAMPLE_RATE = %u", g_config.ws_codec_sample_rate);
+    LOGINF("Config: WS_CODEC_CHANNELS = %u", g_config.ws_codec_channels);
+    LOGINF(
+        "Config: WS_CODEC_ENDIAN = %s",
+        g_config.ws_codec_endian ? g_config.ws_codec_endian : "(null)");
+    LOGINF("Config: WS_CODEC_VAD_ENABLE = %s", g_config.ws_codec_vad_enable ? "true" : "false");
+    LOGINF("Config: VAD_FILE = %s", g_config.vad_file ? g_config.vad_file : "(null)");
 }
 
 int config_load(void) {
@@ -130,6 +154,14 @@ int config_load(void) {
     auto const redis_db     = get_env_or_default_int("EVENT_REDIS_DATABASE", 0);
     auto const kafka_brok   = get_env_or_default("EVENT_KAFKA_BROKERS", "127.0.0.1:9092");
     auto const kafka_top    = get_env_or_default("EVENT_KAFKA_TOPIC", "orbit-events");
+
+    auto const ws_codec_payload_type = get_env_or_default("WS_CODEC_PAYLOAD_TYPE", "PASS");
+    auto const ws_codec_sample_rate =
+        (uint16_t)get_env_or_default_int("WS_CODEC_SAMPLE_RATE", 16000);
+    auto const ws_codec_channels   = (uint16_t)get_env_or_default_int("WS_CODEC_CHANNELS", 1);
+    auto const ws_codec_endian     = get_env_or_default("WS_CODEC_ENDIAN", "little");
+    bool const ws_codec_vad_enable = get_env_or_default_bool("WS_CODEC_VAD_ENABLE", false);
+    auto const vad_file            = get_env_strict("VAD_FILE");
 
     if (!is_valid_port(min_port) || !is_valid_port(max_port) || min_port >= max_port) {
         LOGERR(
@@ -233,6 +265,12 @@ int config_load(void) {
     g_config.event_redis_db        = redis_db;
     g_config.event_kafka_brokers   = kafka_brok;
     g_config.event_kafka_topic     = kafka_top;
+    g_config.ws_codec_payload_type = ws_codec_payload_type;
+    g_config.ws_codec_sample_rate  = ws_codec_sample_rate;
+    g_config.ws_codec_channels     = ws_codec_channels;
+    g_config.ws_codec_endian       = ws_codec_endian;
+    g_config.ws_codec_vad_enable   = ws_codec_vad_enable;
+    g_config.vad_file              = vad_file;
 
     config_print();
 

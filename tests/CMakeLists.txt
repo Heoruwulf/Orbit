@@ -5,6 +5,10 @@ set(TEST_SRCS
     test_rtp.c
     test_ws.c
     test_event.c
+    test_config_audio.c
+    test_audio_resampler.c
+    test_audio_vad.c
+    test_audio_transcode.c
 )
 
 foreach(test_src IN LISTS TEST_SRCS)

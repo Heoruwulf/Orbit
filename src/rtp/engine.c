@@ -380,8 +380,23 @@ bool rtp_engine_send_payload(
 
 void rtp_engine_process_packet(struct io_event_ctx *restrict const ctx, size_t const bytes_read) {
     if (likely(bytes_read > 12)) {
-        // Minimum RTP header size is 12 bytes. Skip the header and send the payload.
-        ws_bridge_send_binary(ctx->session, (uint8_t const *)ctx->buffer + 12, bytes_read - 12);
+        if (ctx->session != nullptr && ctx->session->transcode_initialized) {
+            uint8_t *transcoded            = nullptr;
+            size_t   transcoded_len        = 0;
+            ctx->session->rtp_scratch.curr = 0;
+            transcode_process(
+                &ctx->session->ts_to_ws,
+                (uint8_t const *)ctx->buffer + 12,
+                bytes_read - 12,
+                &ctx->session->rtp_scratch,
+                &transcoded,
+                &transcoded_len);
+            if (transcoded && transcoded_len > 0) {
+                ws_bridge_send_binary(ctx->session, transcoded, transcoded_len);
+            }
+        } else {
+            ws_bridge_send_binary(ctx->session, (uint8_t const *)ctx->buffer + 12, bytes_read - 12);
+        }
     }
 
     if (unlikely(ctx->session != nullptr && !ctx->session->has_learned_remote_addr)) {

@@ -25,6 +25,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef unreachable
 #define unreachable() __builtin_unreachable()
 #endif
+#include "orbit/audio.h"
 #include "orbit/rtp_jitter.h"
 
 struct io_event_ctx;
@@ -119,6 +120,16 @@ struct call_session {
     size_t                internal_id_len; /**< Length of the internal UUID string. */
     char internal_id_buf[37]; /**< Cached buffer containing the internal UUID string. */
     char call_id_buf[128];    /**< Cached buffer containing the Call-ID string. */
+
+    struct transcode_session ts_to_ws;
+    struct transcode_session ts_to_rtp;
+    bool                     transcode_initialized;
+    alignas(32) uint8_t vad_arena_buf[8192];
+    struct audio_arena vad_arena;
+    alignas(32) uint8_t rtp_scratch_buf[8192];
+    struct audio_arena rtp_scratch;
+    alignas(32) uint8_t ws_scratch_buf[8192];
+    struct audio_arena ws_scratch;
 };
 
 /**

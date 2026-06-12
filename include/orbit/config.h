@@ -41,15 +41,21 @@ struct app_config {
     uint16_t    event_udp_listen_port; /**< Target UDP port for event publishing. */
     uint32_t    max_calls;             /**< Maximum concurrent call sessions allowed. */
     char const *event_provider; /**< Event provider type (udp, redis, kafka, mock, disabled). */
-    uint32_t    event_queue_capacity; /**< Event queue capacity per worker. */
-    char const *event_redis_host;     /**< Redis host address. */
-    uint16_t    event_redis_port;     /**< Redis host port. */
-    char const *event_redis_channel;  /**< Redis channel for publishing. */
-    char const *event_redis_username; /**< Redis username for authentication. */
-    char const *event_redis_password; /**< Redis password for authentication. */
-    int32_t     event_redis_db;       /**< Redis database number. */
-    char const *event_kafka_brokers;  /**< Kafka bootstrap brokers. */
-    char const *event_kafka_topic;    /**< Kafka topic name. */
+    uint32_t    event_queue_capacity;  /**< Event queue capacity per worker. */
+    char const *event_redis_host;      /**< Redis host address. */
+    uint16_t    event_redis_port;      /**< Redis host port. */
+    char const *event_redis_channel;   /**< Redis channel for publishing. */
+    char const *event_redis_username;  /**< Redis username for authentication. */
+    char const *event_redis_password;  /**< Redis password for authentication. */
+    int32_t     event_redis_db;        /**< Redis database number. */
+    char const *event_kafka_brokers;   /**< Kafka bootstrap brokers. */
+    char const *event_kafka_topic;     /**< Kafka topic name. */
+    char const *ws_codec_payload_type; /**< Expected WS payload format. */
+    uint16_t    ws_codec_sample_rate;  /**< Expected WS sample rate. */
+    uint16_t    ws_codec_channels;     /**< Expected WS channels. */
+    char const *ws_codec_endian;       /**< Expected endianness (little, big, none). */
+    bool        ws_codec_vad_enable;   /**< Activate VAD on WebSocket bridge. */
+    char const *vad_file;              /**< Path to external VAD file. */
 };
 
 extern struct app_config g_config;

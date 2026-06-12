@@ -118,17 +118,118 @@ static void on_msg_recv_callback(
         }
     } else if (arg->opcode == WSLAY_BINARY_FRAME) {
         if (session->sip_call != nullptr && session->sip_call->is_active) {
-            rtp_engine_send_payload(
-                session->sip_call,
-                session->sip_call->rtp_fd,
-                arg->msg,
-                arg->msg_length);
+            uint8_t *transcoded     = nullptr;
+            size_t   transcoded_len = 0;
+            if (session->sip_call->transcode_initialized) {
+                session->sip_call->ws_scratch.curr = 0;
+                transcode_process(
+                    &session->sip_call->ts_to_rtp,
+                    arg->msg,
+                    arg->msg_length,
+                    &session->sip_call->ws_scratch,
+                    &transcoded,
+                    &transcoded_len);
+            }
+            if (transcoded && transcoded_len > 0) {
+                rtp_engine_send_payload(
+                    session->sip_call,
+                    session->sip_call->rtp_fd,
+                    transcoded,
+                    transcoded_len);
+            } else if (!session->sip_call->transcode_initialized) {
+                rtp_engine_send_payload(
+                    session->sip_call,
+                    session->sip_call->rtp_fd,
+                    arg->msg,
+                    arg->msg_length);
+            }
         }
     }
 }
 
 static struct wslay_event_callbacks const wslay_cbs =
     {recv_callback, send_callback, nullptr, nullptr, nullptr, nullptr, on_msg_recv_callback};
+
+static void init_transcoders_for_call(struct call_session *sip) {
+    if (sip->transcode_initialized)
+        return;
+
+    sip->vad_arena.buf      = sip->vad_arena_buf;
+    sip->vad_arena.capacity = sizeof(sip->vad_arena_buf);
+    sip->vad_arena.curr     = 0;
+
+    sip->rtp_scratch.buf      = sip->rtp_scratch_buf;
+    sip->rtp_scratch.capacity = sizeof(sip->rtp_scratch_buf);
+    sip->rtp_scratch.curr     = 0;
+
+    sip->ws_scratch.buf      = sip->ws_scratch_buf;
+    sip->ws_scratch.capacity = sizeof(sip->ws_scratch_buf);
+    sip->ws_scratch.curr     = 0;
+
+    enum audio_codec ws_codec = CODEC_PASS;
+    if (g_config.ws_codec_payload_type) {
+        if (__builtin_strcmp(g_config.ws_codec_payload_type, "PCMU") == 0)
+            ws_codec = CODEC_PCMU;
+        else if (__builtin_strcmp(g_config.ws_codec_payload_type, "PCMA") == 0)
+            ws_codec = CODEC_PCMA;
+        else if (__builtin_strcmp(g_config.ws_codec_payload_type, "L16") == 0)
+            ws_codec = CODEC_L16;
+    }
+
+    enum audio_endian ws_endian = ENDIAN_NONE;
+    if (g_config.ws_codec_endian) {
+        if (__builtin_strcmp(g_config.ws_codec_endian, "little") == 0)
+            ws_endian = ENDIAN_LITTLE;
+        else if (__builtin_strcmp(g_config.ws_codec_endian, "big") == 0)
+            ws_endian = ENDIAN_BIG;
+    }
+
+    enum audio_codec rtp_codec       = CODEC_PASS;
+    uint32_t         rtp_sample_rate = 8000;
+    uint32_t         rtp_channels    = 1;
+    if (sip->remote_sdp.pcmu.payload_type != 255) {
+        rtp_codec = CODEC_PCMU;
+        rtp_sample_rate =
+            sip->remote_sdp.pcmu.sample_rate ? sip->remote_sdp.pcmu.sample_rate : 8000;
+        rtp_channels = sip->remote_sdp.pcmu.channels ? sip->remote_sdp.pcmu.channels : 1;
+    } else if (sip->remote_sdp.pcma.payload_type != 255) {
+        rtp_codec = CODEC_PCMA;
+        rtp_sample_rate =
+            sip->remote_sdp.pcma.sample_rate ? sip->remote_sdp.pcma.sample_rate : 8000;
+        rtp_channels = sip->remote_sdp.pcma.channels ? sip->remote_sdp.pcma.channels : 1;
+    } else if (sip->remote_sdp.l16.payload_type != 255) {
+        rtp_codec       = CODEC_L16;
+        rtp_sample_rate = sip->remote_sdp.l16.sample_rate ? sip->remote_sdp.l16.sample_rate : 16000;
+        rtp_channels    = sip->remote_sdp.l16.channels ? sip->remote_sdp.l16.channels : 1;
+    }
+
+    struct transcode_config to_ws_cfg = {
+        .in_codec        = rtp_codec,
+        .in_sample_rate  = rtp_sample_rate,
+        .in_channels     = rtp_channels,
+        .in_endian       = ENDIAN_NONE,
+        .out_codec       = ws_codec,
+        .out_sample_rate = g_config.ws_codec_sample_rate,
+        .out_channels    = g_config.ws_codec_channels,
+        .out_endian      = ws_endian,
+        .vad_enabled     = g_config.ws_codec_vad_enable};
+
+    struct transcode_config to_rtp_cfg = {
+        .in_codec        = ws_codec,
+        .in_sample_rate  = g_config.ws_codec_sample_rate,
+        .in_channels     = g_config.ws_codec_channels,
+        .in_endian       = ws_endian,
+        .out_codec       = rtp_codec,
+        .out_sample_rate = rtp_sample_rate,
+        .out_channels    = rtp_channels,
+        .out_endian      = ENDIAN_NONE,
+        .vad_enabled     = false};
+
+    transcode_session_init(&sip->ts_to_ws, &to_ws_cfg, &sip->vad_arena);
+    transcode_session_init(&sip->ts_to_rtp, &to_rtp_cfg, nullptr);
+
+    sip->transcode_initialized = true;
+}
 
 int ws_bridge_init(void) {
     ws_pool = pool_create((struct pool_config){.object_size = sizeof(struct ws_bridge_session),
@@ -278,6 +379,7 @@ void ws_bridge_process_recv(struct io_event_ctx *restrict const ctx, int const r
                     "WS Bridge: Handshake successful, mapped to Call-ID: %.*s",
                     (int)sip->call_id_len,
                     sip->call_id_buf);
+                init_transcoders_for_call(sip);
                 session->sip_call   = sip;
                 session->handshaked = true;
                 sip->ws_session     = session;

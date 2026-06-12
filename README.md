@@ -16,6 +16,8 @@ Designed for raw speed, it uses a multi-ring Linux `io_uring` kernel event loop 
 - **`io_uring` Backend:** Fully async, kernel-level I/O processing for both TCP (WebSockets) and UDP (SIP/RTP) processing.
 - **Scatter-Gather I/O:** Packets are processed with zero-copy logic via `iovec`.
 - **Stateless SIP Routing:** Real-time SIP `INVITE` mapping, `SDP` parsing, and `OPTIONS` capability advertisement.
+- **Audio Transcoding Pipeline:** Real-time AVX2-accelerated, lock-free transcoding between PCMU, PCMA, and Linear PCM 16-bit (L16) codecs. Includes phase-synchronous polyphase resampling.
+- **Voice Activity Detection (VAD):** Built-in micro-GRU neural network for instantaneous probabilistic speech detection, computed inline without blocking the event loop.
 - **WebSocket Bridge:** Natively bridges WebSocket binary audio payloads into valid RTP datagrams (and vice versa) utilizing `wslay`.
 - **Asynchronous Eventing:** Publishes real-time call lifecycle events (e.g., `call_answered`) asynchronously to protect the hot path. Supports three backends:
   - **UDP:** Lightweight raw JSON event emission over UDP sockets.
@@ -79,32 +81,65 @@ Start the bridge by running the built executable. `orbit` relies heavily on envi
 
 ### Environment Variables
 
+#### General Configuration
+
 | Variable | Default Value | Description |
 |---|---|---|
-| `SIP_LISTEN_ADDR` | `0.0.0.0` | The local IP address the SIP listener should bind to. |
-| `SIP_LISTEN_PORT` | `5060` | The UDP port the SIP listener should bind to. |
-| `SIP_EXTERNAL_ADDR` | `127.0.0.1` | The public IP address advertised in SIP headers (`Contact`, `Via`). |
-| `RTP_LISTEN_ADDR` | `0.0.0.0` | The local IP address the RTP media ports should bind to. |
-| `RTP_EXTERNAL_ADDR` | `127.0.0.1` | The public IP address advertised in the SIP `SDP` bodies. |
-| `RTP_MIN_PORT` | `16000` | The inclusive start range of the dynamic UDP RTP ports. |
-| `RTP_MAX_PORT` | `32000` | The inclusive end range of the dynamic UDP RTP ports. |
-| `WS_LISTEN_ADDR` | `0.0.0.0` | The local IP address the WebSocket bridge should bind to. |
-| `WS_EXTERNAL_ADDR` | `127.0.0.1` | The public IP address the WebSocket server advertises (if applicable). |
-| `WS_LISTEN_PORT` | `8080` | The TCP port the WebSocket bridge binds and listens on. |
-| `WS_EXTERNAL_PORT` | `8080` | The public TCP port for the WebSocket server advertised in events. |
+| `MAX_CALLS` | `1024` | Optional. Sets the maximum number of calls this server will handle. |
+
+#### Event System
+
+| Variable | Default Value | Description |
+|---|---|---|
+| `EVENT_KAFKA_BROKERS` | `127.0.0.1:9092` | Comma-separated list of Kafka bootstrap brokers. |
+| `EVENT_KAFKA_TOPIC` | `orbit-events` | Target Kafka topic for publishing events. |
 | `EVENT_PROVIDER` | `udp` | The event provider backend to use (`udp`, `redis`, `kafka`, `mock`, `disabled`). |
 | `EVENT_QUEUE_CAPACITY` | `16384` | Maximum event queue capacity per worker thread. Must be between `MAX_CALLS` and `MAX_CALLS * 16`. |
-| `EVENT_UDP_LISTEN_ADDR` | None | Optional. If provided, UDP bridge events will be sent to this IP. |
-| `EVENT_UDP_LISTEN_PORT` | `0` | Optional. If provided, UDP bridge events will be sent to this port. |
 | `EVENT_REDIS_CHANNEL` | `orbit:events` | Target Redis Pub/Sub channel. |
 | `EVENT_REDIS_DATABASE` | `0` | Target Redis database number. |
 | `EVENT_REDIS_HOST` | `127.0.0.1` | Target Redis server IP address or hostname. |
 | `EVENT_REDIS_PASSWORD` | None | Optional. Redis password for authentication. |
 | `EVENT_REDIS_PORT` | `6379` | Target Redis server port. |
 | `EVENT_REDIS_USERNAME` | None | Optional. Redis username for ACL-based authentication. |
-| `EVENT_KAFKA_BROKERS` | `127.0.0.1:9092` | Comma-separated list of Kafka bootstrap brokers. |
-| `EVENT_KAFKA_TOPIC` | `orbit-events` | Target Kafka topic for publishing events. |
-| `MAX_CALLS` | `1024` | Optional. Sets the maximum number of calls this server will handle. |
+| `EVENT_UDP_LISTEN_ADDR` | None | Optional. If provided, UDP bridge events will be sent to this IP. |
+| `EVENT_UDP_LISTEN_PORT` | `0` | Optional. If provided, UDP bridge events will be sent to this port. |
+
+#### RTP Media
+
+| Variable | Default Value | Description |
+|---|---|---|
+| `RTP_EXTERNAL_ADDR` | `127.0.0.1` | The public IP address advertised in the SIP `SDP` bodies. |
+| `RTP_LISTEN_ADDR` | `0.0.0.0` | The local IP address the RTP media ports should bind to. |
+| `RTP_MAX_PORT` | `32000` | The inclusive end range of the dynamic UDP RTP ports. |
+| `RTP_MIN_PORT` | `16000` | The inclusive start range of the dynamic UDP RTP ports. |
+
+#### SIP Signaling
+
+| Variable | Default Value | Description |
+|---|---|---|
+| `SIP_EXTERNAL_ADDR` | `127.0.0.1` | The public IP address advertised in SIP headers (`Contact`, `Via`). |
+| `SIP_LISTEN_ADDR` | `0.0.0.0` | The local IP address the SIP listener should bind to. |
+| `SIP_LISTEN_PORT` | `5060` | The UDP port the SIP listener should bind to. |
+
+#### Transcoding & VAD
+
+| Variable | Default Value | Description |
+|---|---|---|
+| `VAD_FILE` | None | Optional. Path to an external VAD weights file (currently optimized for built-in AVX2 weights). |
+| `WS_CODEC_CHANNELS` | `1` | Target channel count for WebSocket audio. |
+| `WS_CODEC_ENDIAN` | `little` | Target endianness for 16-bit audio (`little`, `big`, `none`). |
+| `WS_CODEC_PAYLOAD_TYPE` | `PASS` | Target codec for WebSocket audio (`PASS`, `PCMU`, `PCMA`, `L16`). `PASS` disables transcoding. |
+| `WS_CODEC_SAMPLE_RATE` | `16000` | Target sample rate for WebSocket audio (e.g., `8000`, `16000`). |
+| `WS_CODEC_VAD_ENABLE` | `false` | Enable Voice Activity Detection (VAD) on the incoming WebSocket stream. |
+
+#### WebSocket Bridge
+
+| Variable | Default Value | Description |
+|---|---|---|
+| `WS_EXTERNAL_ADDR` | `127.0.0.1` | The public IP address the WebSocket server advertises (if applicable). |
+| `WS_EXTERNAL_PORT` | `8080` | The public TCP port for the WebSocket server advertised in events. |
+| `WS_LISTEN_ADDR` | `0.0.0.0` | The local IP address the WebSocket bridge should bind to. |
+| `WS_LISTEN_PORT` | `8080` | The TCP port the WebSocket bridge binds and listens on. |
 
 ## WebSocket Protocol
 
@@ -150,6 +185,17 @@ All media payloads are exchanged as **Binary Frames**.
 
 - **Client to Server**: Send raw audio payload bytes matching the negotiated codec (e.g., PCMU, OPUS). The server will automatically prepend the correct 12-byte RTP header and monotonically increasing sequence/timestamp data before dispatching it to the SIP endpoint via UDP.
 - **Server to Client**: The server intercepts incoming RTP packets, strips the 12-byte RTP header (and any extensions), and forwards purely the audio payload bytes to the client as a binary WebSocket frame.
+
+### 5. Audio Transcoding & VAD
+
+Orbit includes a zero-allocation, AVX2-accelerated inline audio pipeline. If `WS_CODEC_PAYLOAD_TYPE` is configured to anything other than `PASS`, Orbit will automatically:
+
+1. Decode the RTP stream from its negotiated SDP codec to Linear PCM.
+2. Resample the audio to the target `WS_CODEC_SAMPLE_RATE`.
+3. Encode it to the target `WS_CODEC_PAYLOAD_TYPE` and `WS_CODEC_ENDIAN` before sending it to the WebSocket.
+4. Perform the exact reverse operation lock-free for binary payloads originating from the WebSocket client.
+
+If `WS_CODEC_VAD_ENABLE=true` is set, Orbit processes the decoded linear audio through a statically-linked micro-GRU Voice Activity Detection neural network, allowing programmatic detection of active speech probability.
 
 ## Event System & Schemas
 

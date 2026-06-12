@@ -6,9 +6,15 @@ file(GLOB_RECURSE SRC_FILES
     "ws/*.c"
 )
 
+if(ENABLE_AUDIO_CODEC)
+    file(GLOB_RECURSE AUDIO_SRC_FILES "audio/*.c")
+    list(APPEND SRC_FILES ${AUDIO_SRC_FILES})
+    set_source_files_properties(${AUDIO_SRC_FILES} PROPERTIES COMPILE_FLAGS "-mavx -mavx2 -mfma")
+endif()
+
 # Create a static library for the core logic
 add_library(orbit_lib STATIC ${SRC_FILES})
-target_link_libraries(orbit_lib PUBLIC wslay yyjson)
+target_link_libraries(orbit_lib PUBLIC wslay yyjson m)
 
 if(ENABLE_EVENT_REDIS)
     target_link_libraries(orbit_lib PUBLIC ${HIREDIS_LIBRARIES})

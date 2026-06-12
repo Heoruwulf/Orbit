@@ -37,6 +37,7 @@ pkg_check_modules(URING REQUIRED liburing)
 option(ENABLE_EVENT_REDIS "Enable Redis event provider" ON)
 option(ENABLE_EVENT_KAFKA "Enable Kafka event provider" ON)
 option(ENABLE_EVENT_UDP "Enable UDP event provider" ON)
+option(ENABLE_AUDIO_CODEC "Enable audio transcoding and VAD" OFF)
 
 if(ENABLE_EVENT_UDP)
     add_compile_definitions(ORBIT_WITH_UDP)

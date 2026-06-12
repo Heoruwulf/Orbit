@@ -8,6 +8,7 @@ BUILD_TYPE="Debug"
 DO_CLEAN=false
 ENABLE_REDIS="ON"
 ENABLE_KAFKA="ON"
+ENABLE_AUDIO="ON"
 
 # Parse command line arguments
 for arg in "$@"; do
@@ -24,9 +25,12 @@ for arg in "$@"; do
         no-kafka)
             ENABLE_KAFKA="OFF"
             ;;
+        no-audio)
+            ENABLE_AUDIO="OFF"
+            ;;
         *)
             echo "[ERRO] Unknown argument: $arg"
-            echo "Usage: ./scripts/build.sh [release] [clean] [no-redis] [no-kafka]"
+            echo "Usage: ./scripts/build.sh [release] [clean] [no-redis] [no-kafka] [no-audio]"
             exit 1
             ;;
     esac
@@ -47,7 +51,7 @@ fi
 echo "[INFO] Generating CMake configuration (Build Type: $BUILD_TYPE)..."
 # -B build defines the build directory
 # -DCMAKE_BUILD_TYPE sets Debug or Release optimizations and symbols
-cmake -B build -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DENABLE_EVENT_REDIS="$ENABLE_REDIS" -DENABLE_EVENT_KAFKA="$ENABLE_KAFKA"
+cmake -B build -DCMAKE_BUILD_TYPE="$BUILD_TYPE" -DENABLE_EVENT_REDIS="$ENABLE_REDIS" -DENABLE_EVENT_KAFKA="$ENABLE_KAFKA" -DENABLE_AUDIO_CODEC="$ENABLE_AUDIO"
 
 echo "[INFO] Compiling orbit..."
 # Build utilizing all available CPU cores
